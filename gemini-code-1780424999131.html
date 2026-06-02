@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Messaging App</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f9; display: flex; height: 100vh; overflow: hidden; }
+        .hidden { display: none !important; }
+        
+        /* Auth Screen */
+        #auth-screen { margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 90%; max-width: 350px; text-align: center; }
+        #auth-screen input, #auth-screen button { width: 100%; margin: 10px 0; padding: 12px; box-sizing: border-box; font-size: 16px; /* 16px prevents mobile auto-zoom */ }
+        #auth-screen button { background-color: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        
+        /* App Layout */
+        #app-screen { display: flex; width: 100%; height: 100%; position: relative; }
+        
+        /* Sidebar */
+        #sidebar { width: 300px; background: #2c3e50; color: white; display: flex; flex-direction: column; height: 100%; border-right: 1px solid #1a252f; }
+        .sidebar-header { padding: 20px; background: #1a252f; text-align: center; }
+        .sidebar-header h3 { margin: 0 0 10px 0; font-size: 1.3em;}
+        .sidebar-header button { cursor: pointer; padding: 8px 12px; background: #e74c3c; color: white; border: none; border-radius: 3px; font-weight: bold;}
+        .section { padding: 15px; border-bottom: 1px solid #34495e; }
+        .section h4 { margin: 0 0 10px 0; }
+        .section input, .section button { width: 100%; margin-top: 5px; padding: 10px; box-sizing: border-box; font-size: 14px; }
+        
+        .list-item { padding: 12px; background: #34495e; margin-top: 5px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+        .list-item:hover { background: #415b76; }
+        .friend-name-area { display: flex; align-items: center; font-size: 1.1em;}
+        .blue-dot { width: 12px; height: 12px; background-color: #3498db; border-radius: 50%; display: inline-block; margin-left: 10px; box-shadow: 0 0 5px rgba(52, 152, 219, 0.8);}
+        
+        .btn-small { background: #2ecc71; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 3px; font-weight: bold;}
+        .hint-text { font-size: 11px; color: #bdc3c7; margin-top: 5px; display: block; }
+        
+        /* Chat Area */
+        #chat-area { flex: 1; display: flex; flex-direction: column; background: white; height: 100%; }
+        #chat-header { padding: 20px; background: #ecf0f1; border-bottom: 1px solid #bdc3c7; font-size: 1.2em; font-weight: bold; display: flex; align-items: center; }
+        
+        #mobile-back-btn { background: none; border: none; color: #007bff; font-size: 1em; cursor: pointer; margin-right: 15px; display: none; font-weight: bold; }
+        
+        #messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; background: #ffffff; }
+        
+        /* Message Styling */
+        .msg-container { display: flex; flex-direction: column; max-width: 70%; }
+        .msg-container.sent { align-self: flex-end; align-items: flex-end; }
+        .msg-container.received { align-self: flex-start; align-items: flex-start; }
+        
+        .msg { padding: 12px 16px; border-radius: 18px; word-wrap: break-word; font-size: 15px; line-height: 1.4; }
+        .msg.sent { background: #007bff; color: white; border-bottom-right-radius: 4px; }
+        .msg.received { background: #f1f0f0; color: black; border-bottom-left-radius: 4px; }
+        
+        /* Timestamps and Read Receipts */
+        .meta-data { font-size: 0.75em; margin-top: 4px; display: flex; gap: 5px; align-items: center;}
+        .meta-time { color: #95a5a6; }
+        
+        /* Input Area */
+        #chat-input-area { padding: 15px 20px; border-top: 1px solid #bdc3c7; display: flex; gap: 10px; align-items: center; background: #f8f9fa;}
+        #chat-input-area input[type="text"] { flex: 1; padding: 14px; border: 1px solid #ccc; border-radius: 25px; outline: none; font-size: 15px; }
+        .action-btn { padding: 12px 20px; background: #007bff; color: white; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; font-size: 15px;}
+
+        /* =========================================
+           RESPONSIVE MOBILE DESIGN
+           ========================================= */
+        @media screen and (max-width: 768px) {
+            #sidebar { width: 100%; border-right: none; }
+            #chat-area { 
+                position: absolute; 
+                top: 0; 
+                left: 0; 
+                width: 100%; 
+                z-index: 10; 
+                display: none; /* Hidden by default on mobile */
+            }
+            #chat-area.mobile-active { display: flex; } /* Shown when chat is opened */
+            #mobile-back-btn { display: inline-block; } /* Show back button on mobile */
+            
+            .msg-container { max-width: 85%; } /* Make bubbles wider on small screens */
+            .action-btn { padding: 12px 15px; } /* Slightly smaller send button */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="auth-screen">
+        <h2>Welcome</h2>
+        <input type="text" id="auth-username" placeholder="Username">
+        <input type="password" id="auth-password" placeholder="Password">
+        <button onclick="login()">Log In</button>
+        <button onclick="signUp()" style="background-color: #28a745;">Sign Up</button>
+        <p id="auth-error" style="color: red; font-size: 14px; font-weight: bold; margin-top: 15px;"></p>
+    </div>
+
+    <div id="app-screen" class="hidden">
+        <div id="sidebar">
+            <div class="sidebar-header">
+                <h3 id="my-username-display">Loading...</h3>
+                <button onclick="logout()">Log Out</button>
+            </div>
+            <div class="section">
+                <h4>Add Friend</h4>
+                <input type="text" id="add-friend-username" placeholder="Friend's Username">
+                <button onclick="sendFriendRequest()">Send Request</button>
+            </div>
+            <div class="section">
+                <h4>Friend Requests</h4>
+                <div id="requests-list"></div>
+            </div>
+            <div class="section" style="flex: 1; overflow-y: auto;">
+                <h4>Friends List</h4>
+                <span class="hint-text">Right-click (or tap and hold) a friend to set a nickname!</span>
+                <div id="friends-list"></div>
+            </div>
+        </div>
+
+        <div id="chat-area" class="hidden">
+            <div id="chat-header">
+                <button id="mobile-back-btn" onclick="closeMobileChat()">⬅ Back</button>
+                <span id="chat-header-name">Select a friend to chat</span>
+            </div>
+            <div id="messages"></div>
+            
+            <div id="chat-input-area">
+                <input type="text" id="message-input" placeholder="Type a message..." onkeypress="if(event.key === 'Enter') sendTextMessage()">
+                <button class="action-btn" onclick="sendTextMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. YOUR FIREBASE CONFIGURATION (chatapp)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBjQ4F-UhswfcW634XUcNqDf3DE0a8O68I",
+            authDomain: "chatapp-b0c63.firebaseapp.com",
+            databaseURL: "https://chatapp-b0c63-default-rtdb.firebaseio.com",
+            projectId: "chatapp-b0c63",
+            storageBucket: "chatapp-b0c63.firebasestorage.app",
+            messagingSenderId: "920353833960",
+            appId: "1:920353833960:web:051f63d23a96b8985f1a5d"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.database();
+
+        let currentUser = null;
+        let currentChatData = null; 
+
+        let myFriendsData = {};
+        let myNicknamesData = {};
+        let backgroundListeners = {}; 
+
+        // ==========================================
+        // 2. AUTHENTICATION LOGIC
+        // ==========================================
+        function signUp() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+            const errorDisplay = document.getElementById('auth-error');
+            errorDisplay.innerText = ""; 
+
+            if (!username || !password) return alert("Please enter a username and password.");
+
+            const fakeEmail = username.toLowerCase() + "@chatapp.local";
+
+            db.ref('usernames/' + username).once('value').then(snapshot => {
+                if (snapshot.exists()) {
+                    errorDisplay.innerText = "Username already taken.";
+                } else {
+                    auth.createUserWithEmailAndPassword(fakeEmail, password)
+                        .then((userCredential) => {
+                            db.ref('users/' + userCredential.user.uid).set({ username: username });
+                            db.ref('usernames/' + username).set(userCredential.user.uid);
+                        })
+                        .catch(err => errorDisplay.innerText = "Error: " + err.message);
+                }
+            }).catch(err => errorDisplay.innerText = "Database Error: " + err.message);
+        }
+
+        function login() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+            const errorDisplay = document.getElementById('auth-error');
+            errorDisplay.innerText = "";
+
+            if (!username || !password) return alert("Please enter both username and password.");
+
+            const fakeEmail = username.toLowerCase() + "@chatapp.local";
+            auth.signInWithEmailAndPassword(fakeEmail, password)
+                .catch(err => errorDisplay.innerText = "Login failed. Check your credentials.");
+        }
+
+        function logout() { 
+            backgroundListeners = {}; 
+            auth.signOut(); 
+        }
+
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('app-screen').classList.remove('hidden');
+                
+                db.ref('users/' + currentUser.uid).once('value').then(snap => {
+                    const myData = snap.val();
+                    if(myData) document.getElementById('my-username-display').innerText = myData.username;
+                });
+
+                loadFriendRequests();
+                loadFriendsAndNicknames();
+            } else {
+                currentUser = null;
+                document.getElementById('auth-screen').classList.remove('hidden');
+                document.getElementById('app-screen').classList.add('hidden');
+                document.getElementById('chat-area').classList.add('hidden');
+            }
+        });
+
+        // ==========================================
+        // 3. FRIENDS & NICKNAMES LOGIC
+        // ==========================================
+        function sendFriendRequest() {
+            const targetUsername = document.getElementById('add-friend-username').value.trim();
+            if (!targetUsername) return;
+
+            db.ref('usernames/' + targetUsername).once('value').then(snap => {
+                if (!snap.exists()) return alert("User not found!");
+                const targetUid = snap.val();
+                if (targetUid === currentUser.uid) return alert("You can't add yourself!");
+
+                db.ref('users/' + currentUser.uid).once('value').then(userSnap => {
+                    db.ref('friendRequests/' + targetUid + '/' + currentUser.uid).set(userSnap.val().username);
+                    alert("Friend request sent!");
+                    document.getElementById('add-friend-username').value = '';
+                });
+            });
+        }
+
+        function loadFriendRequests() {
+            db.ref('friendRequests/' + currentUser.uid).on('value', snap => {
+                const list = document.getElementById('requests-list');
+                list.innerHTML = '';
+                snap.forEach(child => {
+                    list.innerHTML += `
+                        <div class="list-item">
+                            <span>${child.val()}</span>
+                            <button class="btn-small" onclick="acceptRequest('${child.key}', '${child.val()}')">Accept</button>
+                        </div>`;
+                });
+            });
+        }
+
+        function acceptRequest(fromUid, fromUsername) {
+            db.ref('users/' + currentUser.uid).once('value').then(snap => {
+                db.ref('friends/' + currentUser.uid + '/' + fromUid).set(fromUsername);
+                db.ref('friends/' + fromUid + '/' + currentUser.uid).set(snap.val().username);
+                db.ref('friendRequests/' + currentUser.uid + '/' + fromUid).remove();
+            });
+        }
+
+        function loadFriendsAndNicknames() {
+            db.ref('friends/' + currentUser.uid).on('value', snap => {
+                myFriendsData = snap.val() || {};
+                renderFriendsList();
+            });
+            db.ref('nicknames/' + currentUser.uid).on('value', snap => {
+                myNicknamesData = snap.val() || {};
+                renderFriendsList();
+            });
+        }
+
+        function renderFriendsList() {
+            const list = document.getElementById('friends-list');
+            list.innerHTML = '';
+            
+            for (const friendUid in myFriendsData) {
+                const originalUsername = myFriendsData[friendUid];
+                const displayName = myNicknamesData[friendUid] || originalUsername;
+                
+                list.innerHTML += `
+                    <div class="list-item" 
+                         onclick="openChat('${friendUid}', '${originalUsername}')"
+                         oncontextmenu="promptNickname(event, '${friendUid}', '${displayName}')">
+                        <div class="friend-name-area">
+                            <span>${displayName}</span>
+                            <span id="dot-${friendUid}" class="blue-dot hidden"></span>
+                        </div>
+                    </div>`;
+                
+                startBackgroundListener(friendUid);
+            }
+        }
+
+        function promptNickname(event, friendUid, currentDisplayName) {
+            event.preventDefault(); 
+            const nickname = prompt("Set a nickname (leave blank to remove):", currentDisplayName);
+            if (nickname !== null) { 
+                if (nickname.trim() === "") db.ref('nicknames/' + currentUser.uid + '/' + friendUid).remove();
+                else db.ref('nicknames/' + currentUser.uid + '/' + friendUid).set(nickname.trim());
+            }
+        }
+
+        // ==========================================
+        // 4. CHAT LOGIC & LIVE READ RECEIPTS
+        // ==========================================
+        let currentMessagesRef = null;
+
+        function startBackgroundListener(friendUid) {
+            const chatId = currentUser.uid < friendUid ? currentUser.uid + "_" + friendUid : friendUid + "_" + currentUser.uid;
+            
+            if (backgroundListeners[chatId]) return;
+            backgroundListeners[chatId] = true;
+
+            db.ref('chats/' + chatId).limitToLast(20).on('value', snap => {
+                let hasUnread = false;
+                
+                snap.forEach(child => {
+                    const msg = child.val();
+                    const msgKey = child.key;
+
+                    if (msg.sender !== currentUser.uid) {
+                        const isChatOpen = (currentChatData && currentChatData.uid === friendUid);
+                        
+                        if (isChatOpen) {
+                            if (msg.status !== 'read') db.ref('chats/' + chatId + '/' + msgKey).update({ status: 'read' });
+                        } else {
+                            if (msg.status === 'sent') {
+                                db.ref('chats/' + chatId + '/' + msgKey).update({ status: 'delivered' });
+                                hasUnread = true;
+                            } else if (msg.status === 'delivered') {
+                                hasUnread = true;
+                            }
+                        }
+                    }
+                });
+
+                const dot = document.getElementById('dot-' + friendUid);
+                if (dot) {
+                    if (hasUnread) dot.classList.remove('hidden');
+                    else dot.classList.add('hidden');
+                }
+            });
+        }
+
+        function openChat(friendUid, originalUsername) {
+            const chatArea = document.getElementById('chat-area');
+            chatArea.classList.remove('hidden');
+            chatArea.classList.add('mobile-active'); // Triggers mobile slide-in
+            
+            const displayName = myNicknamesData[friendUid] || originalUsername;
+            document.getElementById('chat-header-name').innerText = "Chat with " + displayName;
+            document.getElementById('messages').innerHTML = ''; 
+
+            const chatId = currentUser.uid < friendUid ? currentUser.uid + "_" + friendUid : friendUid + "_" + currentUser.uid;
+            currentChatData = { uid: friendUid, username: originalUsername, chatId: chatId };
+
+            db.ref('chats/' + chatId).limitToLast(20).once('value', snap => {
+                snap.forEach(child => {
+                    if (child.val().sender !== currentUser.uid && child.val().status !== 'read') {
+                        db.ref('chats/' + chatId + '/' + child.key).update({ status: 'read' });
+                    }
+                });
+            });
+
+            if (currentMessagesRef) currentMessagesRef.off();
+            currentMessagesRef = db.ref('chats/' + chatId);
+            
+            currentMessagesRef.on('child_added', snap => renderMessage(snap.key, snap.val()));
+            currentMessagesRef.on('child_changed', snap => updateMessageUI(snap.key, snap.val()));
+        }
+
+        // Mobile close chat button
+        function closeMobileChat() {
+            document.getElementById('chat-area').classList.remove('mobile-active');
+            currentChatData = null; // Unfocus chat so background listener works normally
+        }
+
+        function renderMessage(msgKey, msg) {
+            const isMe = msg.sender === currentUser.uid;
+            const timeString = new Date(msg.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-container ' + (isMe ? 'sent' : 'received');
+            wrapper.id = 'msg-wrapper-' + msgKey;
+
+            const bubble = document.createElement('div');
+            bubble.className = 'msg ' + (isMe ? 'sent' : 'received');
+            bubble.innerText = msg.text;
+
+            const meta = document.createElement('div');
+            meta.className = 'meta-data';
+            
+            let receiptHTML = "";
+            if (isMe) {
+                let statusText = "Sent ✓";
+                let statusColor = "#95a5a6";
+                if (msg.status === 'delivered') statusText = "Delivered ✓✓";
+                else if (msg.status === 'read') { statusText = "Read ✓✓"; statusColor = "#3498db"; }
+                
+                receiptHTML = `<span id="receipt-${msgKey}" style="color: ${statusColor}; font-weight: bold;"> • ${statusText}</span>`;
+            }
+
+            meta.innerHTML = `<span class="meta-time">${timeString}</span> ${receiptHTML}`;
+
+            wrapper.appendChild(bubble);
+            wrapper.appendChild(meta);
+            document.getElementById('messages').appendChild(wrapper);
+            
+            const container = document.getElementById('messages');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateMessageUI(msgKey, msg) {
+            const receiptElement = document.getElementById('receipt-' + msgKey);
+            if (receiptElement && msg.sender === currentUser.uid) {
+                let statusText = "Sent ✓";
+                let statusColor = "#95a5a6";
+                if (msg.status === 'delivered') { statusText = "Delivered ✓✓"; } 
+                else if (msg.status === 'read') { statusText = "Read ✓✓"; statusColor = "#3498db"; }
+                
+                receiptElement.style.color = statusColor;
+                receiptElement.innerText = " • " + statusText;
+            }
+        }
+
+        function sendTextMessage() {
+            if (!currentChatData) return;
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const msgData = {
+                sender: currentUser.uid,
+                text: text,
+                status: 'sent', 
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+            };
+
+            db.ref('chats/' + currentChatData.chatId).push(msgData);
+            input.value = '';
+        }
+
+        // ==========================================
+        // 5. SAFETY WARNING: CONFIRM BEFORE CLOSING TAB
+        // ==========================================
+        window.addEventListener('beforeunload', function (e) {
+            e.preventDefault();
+            e.returnValue = '';
+        });
+    </script>
+</body>
+</html>
