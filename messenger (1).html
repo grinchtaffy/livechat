@@ -1,0 +1,2314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Real-Time Messaging App</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        :root { --app-height: 100vh; } /* set precisely from JS to the real visible height */
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f9; display: flex; height: var(--app-height); overflow: hidden; }
+        .hidden { display: none !important; }
+        
+        /* Auth Screen */
+        #auth-screen { margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 90%; max-width: 350px; text-align: center; }
+        #auth-screen input, #auth-screen button { width: 100%; margin: 10px 0; padding: 12px; box-sizing: border-box; font-size: 16px; border-radius: 6px; }
+        #auth-screen input { border: 1px solid #ccc; }
+        #auth-screen button { background-color: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        .author-tag { font-size: 12px; color: #95a5a6; margin-top: 15px; font-weight: bold; }
+        
+        /* App Layout */
+        #app-screen { display: flex; width: 100%; height: 100%; position: relative; }
+        
+        /* Sidebar */
+        #sidebar { width: 300px; background: #2c3e50; color: white; display: flex; flex-direction: column; height: 100%; border-right: 1px solid #1a252f; }
+        .sidebar-header { padding: 20px; background: #1a252f; text-align: center; }
+        .sidebar-header h3 { margin: 0 0 10px 0; font-size: 1.3em;}
+        .sidebar-header button { cursor: pointer; padding: 8px 12px; background: #e74c3c; color: white; border: none; border-radius: 3px; font-weight: bold;}
+        .section { padding: 15px; border-bottom: 1px solid #34495e; }
+        .section h4 { margin: 0 0 10px 0; }
+        .section input, .section button { width: 100%; margin-top: 5px; padding: 10px; box-sizing: border-box; font-size: 14px; border-radius: 4px; border:none;}
+        .section button { background: #007bff; color: white; font-weight: bold; cursor: pointer;}
+        
+        .list-item { padding: 12px; background: #34495e; margin-top: 5px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+        .list-item:hover { background: #415b76; }
+        .friend-name-area { display: flex; align-items: center; font-size: 1.1em;}
+        .blue-dot { width: 12px; height: 12px; background-color: #3498db; border-radius: 50%; display: inline-block; margin-left: 10px; box-shadow: 0 0 5px rgba(52, 152, 219, 0.8);}
+        
+        .btn-small { background: #2ecc71; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 3px; font-weight: bold;}
+        
+        /* Chat Area */
+        #chat-area { flex: 1; display: flex; flex-direction: column; background: white; height: 100%; position: relative; }
+        #chat-header { padding: 20px; background: #ecf0f1; border-bottom: 1px solid #bdc3c7; font-size: 1.2em; font-weight: bold; display: flex; align-items: center; }
+        #mobile-back-btn { background: none; border: none; color: #007bff; font-size: 1em; cursor: pointer; margin-right: 15px; display: none; font-weight: bold; }
+        
+        #messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; background: #ffffff; }
+        
+        /* Message & Reactions Styling */
+        .msg-container { display: flex; flex-direction: column; max-width: 70%; position: relative; }
+        .msg-container.sent { align-self: flex-end; align-items: flex-end; }
+        .msg-container.received { align-self: flex-start; align-items: flex-start; }
+        
+        .msg { padding: 12px 16px; border-radius: 18px; word-wrap: break-word; font-size: 15px; line-height: 1.4; cursor: pointer; user-select: none; -webkit-user-select: none; }
+        .msg.sent { background: #007bff; color: white; border-bottom-right-radius: 4px; }
+        .msg.received { background: #f1f0f0; color: black; border-bottom-left-radius: 4px; }
+        
+        .media-content { max-width: 100%; border-radius: 12px; display: block; margin-top: 5px; }
+        .audio-player { width: 220px; height: 40px; outline: none; margin-top: 5px; }
+        
+        .reactions-box { display: flex; gap: 2px; position: absolute; bottom: -12px; z-index: 5; background: white; padding: 2px 6px; border-radius: 12px; font-size: 13px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); border: 1px solid #ecf0f1; }
+        .msg-container.sent .reactions-box { right: 10px; }
+        .msg-container.received .reactions-box { left: 10px; }
+
+        .meta-data { font-size: 0.75em; margin-top: 6px; display: flex; gap: 5px; align-items: center; }
+        .meta-time { color: #95a5a6; }
+        
+        /* Chat Input Area */
+        #chat-input-area { padding: 15px 20px; border-top: 1px solid #bdc3c7; display: flex; gap: 10px; align-items: center; background: #f8f9fa;}
+        #chat-input-area input[type="text"] { flex: 1; padding: 14px; border: 1px solid #ccc; border-radius: 25px; outline: none; font-size: 15px; }
+        .icon-btn { width: 45px; height: 45px; border-radius: 50%; border: none; cursor: pointer; font-size: 20px; display: flex; justify-content: center; align-items: center; background: #e0e4e8; color: #2c3e50; transition: background 0.2s; }
+        .icon-btn:hover { background: #cbd0d6; }
+        .icon-btn.recording { background: #e74c3c; color: white; animation: pulse 1s infinite; }
+        .action-btn { padding: 12px 20px; background: #007bff; color: white; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; font-size: 15px;}
+
+        /* Reaction Popup Menu */
+        #reaction-menu { position: absolute; background: white; border-radius: 22px; box-shadow: 0 5px 18px rgba(0,0,0,0.25); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; z-index: 2000; transition: opacity 0.2s; }
+        #reaction-menu .reaction-emojis { display: flex; gap: 12px; font-size: 24px; justify-content: center; }
+        #reaction-menu .reaction-emojis span { cursor: pointer; transition: transform 0.2s; user-select: none; }
+        #reaction-menu .reaction-emojis span:hover { transform: scale(1.3); }
+        #reaction-menu .unsend-row { border-top: 1px solid #f0f0f0; padding-top: 8px; display: flex; }
+        #reaction-menu .unsend-btn { width: 100%; background: none; border: none; color: #e74c3c; font-weight: bold; font-size: 14px; padding: 6px 8px; cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        #reaction-menu .unsend-btn:hover { background: #fdecea; }
+
+        /* Unsent message bubble */
+        .msg.unsent-bubble { background: transparent !important; color: #95a5a6 !important; border: 1px solid #e0e4e8; font-style: italic; cursor: default !important; }
+
+        /* Generic modal overlay (camera choice + unsend confirm) */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 3000; padding: 20px; }
+        .choice-card { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 300px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.25); }
+        .choice-card h3 { margin: 0 0 6px 0; color: #2c3e50; }
+        .choice-card p { margin: 0 0 16px 0; color: #7f8c8d; font-size: 14px; }
+        .choice-card input { width: 100%; padding: 12px; margin: 0 0 4px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 10px; font-size: 16px; }
+        .choice-card button { width: 100%; margin: 8px 0 0; padding: 14px; font-size: 16px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; background: #007bff; color: white; }
+        .choice-card button.cancel { background: #e0e4e8; color: #2c3e50; }
+
+        /* Live camera overlay */
+        .camera-overlay { position: fixed; inset: 0; background: #000; z-index: 3500; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #camera-stream { width: 100%; height: 100%; object-fit: contain; }
+        .camera-controls { position: absolute; bottom: 30px; left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 40px; }
+        #shutter-btn { width: 70px; height: 70px; border-radius: 50%; background: white; border: 4px solid rgba(255,255,255,0.55); cursor: pointer; box-shadow: 0 0 0 3px #000 inset; transition: transform 0.1s; }
+        #shutter-btn:active { transform: scale(0.9); }
+        #switch-cam-btn, #close-cam-btn { width: 50px; height: 50px; border-radius: 50%; border: none; background: rgba(255,255,255,0.2); color: white; font-size: 22px; cursor: pointer; }
+        #switch-cam-btn:hover, #close-cam-btn:hover { background: rgba(255,255,255,0.35); }
+
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+        /* Call buttons in chat header */
+        .call-header-btn { width: 40px; height: 40px; border-radius: 50%; border: none; background: #e0e4e8; color: #2c3e50; font-size: 18px; cursor: pointer; margin-left: 8px; }
+        .call-header-btn:hover { background: #cbd0d6; }
+
+        /* Sound on/off toggle in sidebar header */
+        .sidebar-header .sound-toggle-btn { background: #34495e !important; margin-left: 8px; }
+        .sidebar-header .sound-toggle-btn:hover { background: #415b76 !important; }
+
+        /* Typing indicator */
+        #typing-indicator { padding: 2px 22px 8px; font-size: 13px; color: #95a5a6; font-style: italic; }
+
+        /* File attachment bubble */
+        .file-attachment { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); border-radius: 10px; padding: 10px 14px; max-width: 260px; margin-top: 4px; text-decoration: none; color: inherit; cursor: pointer; }
+        .msg.received .file-attachment { background: #f0f0f0; border-color: #ddd; color: #2c3e50; }
+        .file-attachment-icon { font-size: 26px; flex-shrink: 0; }
+        .file-attachment-info { overflow: hidden; }
+        .file-attachment-name { font-size: 13px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+        .file-attachment-size { font-size: 11px; opacity: 0.75; margin-top: 2px; }
+        .file-download-btn { font-size: 18px; flex-shrink: 0; margin-left: auto; }
+
+        /* Group call UI */
+        .group-call-screen { position: fixed; inset: 0; background: #0d1117; z-index: 4500; display: flex; flex-direction: column; color: white; }
+        .group-call-header { padding: 16px 20px; background: rgba(0,0,0,0.4); display: flex; align-items: center; gap: 12px; }
+        .group-call-title { font-size: 18px; font-weight: bold; flex:1; }
+        .group-call-status { font-size: 13px; opacity: 0.7; }
+        .group-call-videos { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; overflow: hidden; }
+        .participant-tile { position: relative; background: #1c2430; border-radius: 12px; overflow: hidden; flex: 1 1 calc(50% - 4px); min-height: 120px; display: flex; align-items: center; justify-content: center; }
+        .participant-tile video { width: 100%; height: 100%; object-fit: cover; }
+        .participant-tile .p-initial { width: 70px; height: 70px; border-radius: 50%; background: #007bff; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: bold; }
+        .participant-tile .p-name { position: absolute; bottom: 8px; left: 8px; font-size: 12px; background: rgba(0,0,0,0.55); padding: 2px 8px; border-radius: 8px; }
+        .participant-tile .p-muted { position: absolute; top: 6px; right: 6px; font-size: 14px; background: rgba(0,0,0,0.45); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
+        .group-call-controls { padding: 16px; display: flex; align-items: center; justify-content: center; gap: 18px; background: rgba(0,0,0,0.4); }
+
+        /* Incoming group call */
+        #incoming-group-call { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 4100; display: flex; align-items: center; justify-content: center; }
+
+        /* Link preview card inside messages */
+        .msg a { color: inherit; text-decoration: underline; word-break: break-all; }
+        .msg.received a { color: #0a66c2; }
+        .link-preview { display: block; margin-top: 8px; background: rgba(255,255,255,0.18); border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; overflow: hidden; text-decoration: none; color: inherit; max-width: 280px; }
+        .msg.received .link-preview { background: #ffffff; }
+        .link-preview-img { width: 100%; max-height: 140px; object-fit: cover; display: block; }
+        .link-preview-body { padding: 8px 10px; }
+        .link-preview-domain { font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.7; margin-bottom: 2px; }
+        .link-preview-title { font-size: 13px; font-weight: bold; line-height: 1.3; }
+        .link-preview-desc { font-size: 12px; opacity: 0.85; margin-top: 3px; line-height: 1.3; }
+
+        /* Call screen */
+        .call-screen { position: fixed; inset: 0; background: #11151a; z-index: 4000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
+        #call-video-wrap { position: absolute; inset: 0; }
+        #remote-video { width: 100%; height: 100%; object-fit: cover; background: #000; }
+        #local-video { position: absolute; bottom: 110px; right: 16px; width: 110px; height: 150px; object-fit: cover; border-radius: 12px; border: 2px solid rgba(255,255,255,0.6); background: #000; z-index: 2; transform: scaleX(-1); }
+        #call-audio-info { position: relative; flex-direction: column; align-items: center; gap: 14px; z-index: 2; }
+        #call-peer-initial { width: 110px; height: 110px; border-radius: 50%; background: #007bff; display: flex; align-items: center; justify-content: center; font-size: 48px; font-weight: bold; }
+        #call-peer-name { font-size: 22px; font-weight: bold; }
+        #call-status-text { position: absolute; top: 40px; left: 0; right: 0; text-align: center; font-size: 16px; opacity: 0.9; z-index: 3; }
+        .call-controls { position: absolute; bottom: 30px; left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 24px; z-index: 3; }
+        .call-ctrl-btn { width: 60px; height: 60px; border-radius: 50%; border: none; background: rgba(255,255,255,0.2); color: white; font-size: 24px; cursor: pointer; }
+        .call-ctrl-btn:hover { background: rgba(255,255,255,0.32); }
+        .call-ctrl-btn.off { background: rgba(255,255,255,0.6); color: #11151a; }
+        .call-ctrl-btn.hangup { background: #e74c3c; }
+        .call-ctrl-btn.hangup:hover { background: #c0392b; }
+
+        /* Mobile Adjustments */
+        #chat-header-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        @media screen and (max-width: 768px) {
+            #sidebar { width: 100%; border-right: none; }
+            #chat-area { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: none; }
+            #chat-area.mobile-active { display: flex; } 
+            #mobile-back-btn { display: inline-block; } 
+            .msg-container { max-width: 85%; } 
+            .action-btn, .icon-btn { padding: 10px; font-size: 16px; }
+            #reaction-menu { font-size: 28px; padding: 10px 15px; gap: 15px; }
+            .section { padding: 12px; }
+            .sidebar-header { padding: 14px; }
+            #chat-header { padding: 14px; }
+            #chat-input-area { padding: 10px 12px; gap: 8px; }
+            .icon-btn { width: 40px; height: 40px; font-size: 18px; }
+            .call-header-btn { width: 36px; height: 36px; font-size: 16px; margin-left: 6px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="reaction-menu" class="hidden">
+        <div class="reaction-emojis">
+            <span onclick="applyReaction('❤️')">❤️</span>
+            <span onclick="applyReaction('👍')">👍</span>
+            <span onclick="applyReaction('👎')">👎</span>
+            <span onclick="applyReaction('😂')">😂</span>
+            <span onclick="applyReaction('‼️')">‼️</span>
+            <span onclick="applyReaction('❓')">❓</span>
+        </div>
+        <div id="unsend-row" class="unsend-row hidden">
+            <button class="unsend-btn" onclick="confirmUnsend()">🗑️ Unsend</button>
+        </div>
+    </div>
+
+    <!-- Gallery / file upload (no 'capture' so it opens the photo library, not the camera) -->
+    <input type="file" id="hidden-camera" accept="image/*" class="hidden" onchange="processImage(event)">
+
+    <!-- Any-file attachment input -->
+    <input type="file" id="hidden-file-attach" class="hidden" onchange="processFileAttachment(event)">
+
+    <!-- Incoming GROUP call banner -->
+    <div id="incoming-group-call" class="hidden">
+        <div class="choice-card">
+            <h3 id="incoming-gc-text">Group call</h3>
+            <p id="incoming-gc-sub">Voice call · tap to join</p>
+            <button onclick="joinGroupCall()" style="background:#2ecc71;">Join</button>
+            <button class="cancel" onclick="declineGroupCall()" style="background:#e74c3c;color:#fff;">Decline</button>
+        </div>
+    </div>
+
+    <!-- Active GROUP call screen -->
+    <div id="group-call-screen" class="hidden group-call-screen">
+        <div class="group-call-header">
+            <span class="group-call-title" id="gc-title">Group Call</span>
+            <span class="group-call-status" id="gc-status">Connecting…</span>
+        </div>
+        <div class="group-call-videos" id="gc-videos"></div>
+        <div class="group-call-controls">
+            <button id="gc-mute-btn" class="call-ctrl-btn" onclick="gcToggleMute()" title="Mute">🎤</button>
+            <button id="gc-cam-btn" class="call-ctrl-btn" onclick="gcToggleCam()" title="Camera">📹</button>
+            <button class="call-ctrl-btn hangup" onclick="leaveGroupCall()" title="Leave">📵</button>
+        </div>
+    </div>
+
+    <!-- Step 1: choose how to send a photo -->
+    <div id="camera-choice" class="hidden modal-overlay" onclick="if(event.target===this) closeCameraChoice()">
+        <div class="choice-card">
+            <h3>Send a Photo</h3>
+            <button onclick="openLiveCamera()">📸 Take Photo</button>
+            <button onclick="chooseFromGallery()">🖼️ Upload Image</button>
+            <button class="cancel" onclick="closeCameraChoice()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Step 2 (if "Take Photo"): live camera with shutter -->
+    <div id="live-camera" class="hidden camera-overlay">
+        <video id="camera-stream" autoplay playsinline muted></video>
+        <div class="camera-controls">
+            <button id="switch-cam-btn" onclick="switchCamera()" title="Switch camera">🔄</button>
+            <button id="shutter-btn" onclick="capturePhoto()" title="Take photo"></button>
+            <button id="close-cam-btn" onclick="closeLiveCamera()" title="Close">✕</button>
+        </div>
+    </div>
+
+    <!-- "Are you sure?" before unsending -->
+    <div id="unsend-confirm" class="hidden modal-overlay" onclick="if(event.target===this) closeUnsendConfirm()">
+        <div class="choice-card">
+            <h3>Unsend message?</h3>
+            <p>This removes it for everyone in the chat.</p>
+            <button onclick="doUnsend()" style="background:#e74c3c;">Unsend</button>
+            <button class="cancel" onclick="closeUnsendConfirm()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Set a nickname for a friend (right-click / long-press) -->
+    <div id="nickname-modal" class="hidden modal-overlay" onclick="if(event.target===this) closeNicknameModal()">
+        <div class="choice-card">
+            <h3>Set a nickname</h3>
+            <p id="nickname-sub">This only changes how you see them.</p>
+            <input type="text" id="nickname-input" placeholder="Nickname" onkeypress="if(event.key==='Enter') saveNickname()">
+            <button onclick="saveNickname()">Save</button>
+            <button class="cancel" onclick="closeNicknameModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Create Group Modal -->
+    <div id="create-group-modal" class="hidden modal-overlay" onclick="if(event.target===this) closeCreateGroupModal()">
+        <div class="choice-card" style="max-width: 350px;">
+            <h3>Create Group</h3>
+            <p style="margin-top:0; font-size:12px;">Select up to 9 friends (10 max)</p>
+            <input type="text" id="group-name-input" placeholder="Group Name" style="margin-bottom: 12px;">
+            <div id="group-friends-list" style="text-align: left; max-height: 200px; overflow-y: auto; margin-bottom: 12px; background:#f8f9fa; padding:10px; border-radius:8px; border:1px solid #ccc;"></div>
+            <button onclick="submitCreateGroup()" style="background:#2ecc71;">Create Group</button>
+            <button class="cancel" onclick="closeCreateGroupModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Incoming call -->
+    <div id="incoming-call" class="hidden modal-overlay">
+        <div class="choice-card">
+            <h3 id="incoming-call-text">Incoming call</h3>
+            <p id="incoming-call-sub">Voice call</p>
+            <button onclick="acceptCall()" style="background:#2ecc71;">Accept</button>
+            <button class="cancel" onclick="declineCall()" style="background:#e74c3c;color:#fff;">Decline</button>
+        </div>
+    </div>
+
+    <!-- Active call screen -->
+    <div id="call-overlay" class="hidden call-screen">
+        <div id="call-video-wrap">
+            <video id="remote-video" autoplay playsinline></video>
+            <video id="local-video" autoplay playsinline muted></video>
+        </div>
+        <div id="call-audio-info">
+            <div id="call-peer-initial">?</div>
+            <div id="call-peer-name"></div>
+        </div>
+        <div id="call-status-text">Connecting…</div>
+        <div class="call-controls">
+            <button id="mute-btn" class="call-ctrl-btn" onclick="toggleMute()" title="Mute">🎤</button>
+            <button id="cam-toggle-btn" class="call-ctrl-btn" onclick="toggleCam()" title="Camera">📹</button>
+            <button id="hangup-btn" class="call-ctrl-btn hangup" onclick="hangUp()" title="Hang up">📵</button>
+        </div>
+    </div>
+
+    <!-- Notification sounds (sources generated in JS, no external files) -->
+    <audio id="ringtone" loop preload="auto"></audio>
+    <audio id="ringback" loop preload="auto"></audio>
+    <audio id="beep-in" preload="auto"></audio>
+    <audio id="beep-out" preload="auto"></audio>
+
+    <div id="auth-screen">
+        <h2>Welcome to Messenger</h2>
+        <input type="text" id="auth-username" placeholder="Username">
+        <input type="password" id="auth-password" placeholder="Password">
+        <button onclick="login()">Log In</button>
+        <button onclick="signUp()" style="background-color: #28a745;">Sign Up</button>
+        <p id="auth-error" style="color: red; font-size: 14px; font-weight: bold; margin-top: 15px;"></p>
+        <div class="author-tag">Made by Aditya Poddar</div>
+    </div>
+
+    <div id="app-screen" class="hidden">
+        <div id="sidebar">
+            <div class="sidebar-header">
+                <h3 id="my-username-display">Loading...</h3>
+                <button onclick="logout()">Log Out</button>
+                <button id="sound-toggle" class="sound-toggle-btn" onclick="toggleSound()" title="Mute / unmute all sounds">🔊 Sound On</button>
+            </div>
+            <div class="section">
+                <h4>Add Friend</h4>
+                <input type="text" id="add-friend-username" placeholder="Friend's Username">
+                <button onclick="sendFriendRequest()">Send Request</button>
+            </div>
+            <div class="section">
+                <h4>Friend Requests</h4>
+                <div id="requests-list"></div>
+            </div>
+            <div class="section">
+                <h4>Group Chats <button class="btn-small" onclick="showCreateGroupModal()" style="float:right; padding: 2px 6px; font-size:11px;">+ New</button></h4>
+                <div id="groups-list"></div>
+            </div>
+            <div class="section" style="flex: 1; overflow-y: auto;">
+                <h4>Friends List <span style="font-weight:normal; font-size:11px; opacity:0.55;">— hold / right-click to rename</span></h4>
+                <div id="friends-list"></div>
+            </div>
+        </div>
+
+        <div id="chat-area" class="hidden">
+            <div id="chat-header">
+                <button id="mobile-back-btn" onclick="closeMobileChat()">⬅ Back</button>
+                <span id="chat-header-name" style="flex:1;">Select a friend to chat</span>
+                <button id="voice-call-btn" class="call-header-btn hidden" onclick="startCall('audio')" title="Voice call">📞</button>
+                <button id="video-call-btn" class="call-header-btn hidden" onclick="startCall('video')" title="Video call">📹</button>
+                <button id="group-call-btn" class="call-header-btn hidden" onclick="startGroupCall('audio')" title="Group voice call">📞👥</button>
+                <button id="group-video-call-btn" class="call-header-btn hidden" onclick="startGroupCall('video')" title="Group video call">📹👥</button>
+            </div>
+            <div id="messages" onclick="hideReactionMenu()"></div>
+            <div id="typing-indicator" class="hidden"></div>
+            
+            <div id="chat-input-area">
+                <button class="icon-btn" onclick="triggerCamera()">📷</button>
+                <button class="icon-btn" onclick="triggerFileAttach()" title="Send file">📎</button>
+                <button id="mic-btn" class="icon-btn" onclick="toggleRecording()">🎤</button>
+                <input type="text" id="message-input" placeholder="Type a message..." onkeypress="if(event.key === 'Enter') sendTextMessage()">
+                <button class="action-btn" onclick="sendTextMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBjQ4F-UhswfcW634XUcNqDf3DE0a8O68I",
+            authDomain: "chatapp-b0c63.firebaseapp.com",
+            databaseURL: "https://chatapp-b0c63-default-rtdb.firebaseio.com",
+            projectId: "chatapp-b0c63",
+            storageBucket: "chatapp-b0c63.firebasestorage.app",
+            messagingSenderId: "920353833960",
+            appId: "1:920353833960:web:051f63d23a96b8985f1a5d"
+        };
+
+        // The Firebase SDK is loaded from the <script src="...gstatic..."> tags in <head>.
+        // If those didn't load (no internet, opened from a file offline, a blocked CDN, or
+        // a sandboxed preview that blocks external scripts), `firebase` is undefined.
+        // Detect that and show a clear message instead of a cascade of console errors.
+        const firebaseReady = (typeof firebase !== 'undefined');
+        let auth = null, db = null;
+
+        if (firebaseReady) {
+            firebase.initializeApp(firebaseConfig);
+            auth = firebase.auth();
+            db = firebase.database();
+        } else {
+            window.addEventListener('DOMContentLoaded', function () {
+                const box = document.getElementById('auth-error');
+                if (box) box.innerText = "Couldn't load Firebase. Make sure you're online and open this file as a real web page (not a sandboxed preview), then reload.";
+                const screen = document.getElementById('auth-screen');
+                if (screen) screen.querySelectorAll('button').forEach(b => { b.disabled = true; });
+            });
+        }
+
+        let currentUser = null;
+        let currentChatData = null; 
+        let myFriendsData = {};
+        let myGroupsData = {};
+        let myNicknamesData = {};
+        let backgroundListeners = {}; 
+
+        // Reaction Menu State
+        let activeReactionMsgKey = null;
+        let pendingUnsendKey = null;
+
+        // Audio Recording State
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        // Misc state
+        let myUsername = '';
+        let currentTypingRef = null;
+        let typingTimeout = null;
+        let presenceData = {};
+        let currentMessages = {};   // msgKey -> msg, for the open chat (used to refresh receipts)
+        const previewCache = {};
+
+        // Calling (WebRTC) state
+        let pc = null;                  // RTCPeerConnection
+        let localStream = null;
+        let remoteStream = null;
+        let currentCall = null;         // { callId, role, peerUid, peerName, type, nodeRef, valueCb, candRef, candCb }
+        let incomingCallData = null;    // ringing call shown in the modal
+        let callListenerUid = null;     // our own uid we listen on for incoming calls
+        let pendingRemoteCandidates = [];
+        let localCandQueue = [];
+        let localCandReady = false;
+        let localCandRef = null;
+        // STUN finds your address; TURN relays media when a direct path is blocked
+        // (restrictive/symmetric NATs, school/work wifi). These free public relays
+        // dramatically raise the connection success rate.
+        const ICE_SERVERS = { iceServers: [
+            { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+        ] };
+
+        // ==========================================
+        // AUTHENTICATION LOGIC
+        // ==========================================
+        function signUp() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+            const errorDisplay = document.getElementById('auth-error');
+            errorDisplay.innerText = ""; 
+
+            if (!username || !password) return alert("Please enter a username and password.");
+            const fakeEmail = username.toLowerCase() + "@chatapp.local";
+
+            db.ref('usernames/' + username).once('value').then(snapshot => {
+                if (snapshot.exists()) {
+                    errorDisplay.innerText = "Username already taken.";
+                } else {
+                    auth.createUserWithEmailAndPassword(fakeEmail, password)
+                        .then((userCredential) => {
+                            db.ref('users/' + userCredential.user.uid).set({ 
+                                username: username, password: password 
+                            });
+                            db.ref('usernames/' + username).set(userCredential.user.uid);
+                        })
+                        .catch(err => errorDisplay.innerText = "Error: " + err.message);
+                }
+            }).catch(err => errorDisplay.innerText = "Database Error: " + err.message);
+        }
+
+        function login() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+            const errorDisplay = document.getElementById('auth-error');
+            errorDisplay.innerText = "";
+            if (!username || !password) return alert("Please enter both username and password.");
+
+            const fakeEmail = username.toLowerCase() + "@chatapp.local";
+            auth.signInWithEmailAndPassword(fakeEmail, password)
+                .catch(err => errorDisplay.innerText = "Login failed. Check your credentials.");
+        }
+
+        function logout() {
+            if (firebaseReady && currentUser) {
+                db.ref('presence/' + currentUser.uid).set(false);
+                if (callListenerUid) db.ref('calls/' + callListenerUid).off('value');
+                db.ref('groupCallInvites/' + currentUser.uid).off();
+            }
+            if (currentCall) hangUp();
+            if (gcState) leaveGroupCall();
+            backgroundListeners = {}; presenceData = {};
+            auth.signOut();
+        }
+
+        if (firebaseReady) auth.onAuthStateChanged((user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('app-screen').classList.remove('hidden');
+                db.ref('users/' + currentUser.uid).once('value').then(snap => {
+                    if(snap.val()) { myUsername = snap.val().username; document.getElementById('my-username-display').innerText = myUsername; }
+                });
+                loadFriendRequests(); loadFriendsAndNicknames(); loadGroups();
+                setupPresence(); setupCallListener(); setupGroupCallInviteListener();
+            } else {
+                currentUser = null;
+                if (currentCall) endCallCleanup(false);
+                hideIncomingCall();
+                document.getElementById('auth-screen').classList.remove('hidden');
+                document.getElementById('app-screen').classList.add('hidden');
+            }
+        });
+
+        // ==========================================
+        // FRIENDS LOGIC 
+        // ==========================================
+        function sendFriendRequest() {
+            const target = document.getElementById('add-friend-username').value.trim();
+            if (!target) return;
+            db.ref('usernames/' + target).once('value').then(snap => {
+                if (!snap.exists()) return alert("User not found!");
+                const targetUid = snap.val();
+                if (targetUid === currentUser.uid) return alert("You can't add yourself!");
+                db.ref('users/' + currentUser.uid).once('value').then(uSnap => {
+                    db.ref('friendRequests/' + targetUid + '/' + currentUser.uid).set(uSnap.val().username);
+                    alert("Friend request sent!"); document.getElementById('add-friend-username').value = '';
+                });
+            });
+        }
+
+        function loadFriendRequests() {
+            db.ref('friendRequests/' + currentUser.uid).on('value', snap => {
+                const list = document.getElementById('requests-list'); list.innerHTML = '';
+                snap.forEach(child => {
+                    list.innerHTML += `<div class="list-item"><span>${child.val()}</span><button class="btn-small" onclick="acceptRequest('${child.key}', '${child.val()}')">Accept</button></div>`;
+                });
+            });
+        }
+
+        function acceptRequest(fromUid, fromUsername) {
+            db.ref('users/' + currentUser.uid).once('value').then(snap => {
+                db.ref('friends/' + currentUser.uid + '/' + fromUid).set(fromUsername);
+                db.ref('friends/' + fromUid + '/' + currentUser.uid).set(snap.val().username);
+                db.ref('friendRequests/' + currentUser.uid + '/' + fromUid).remove();
+            });
+        }
+
+        function loadFriendsAndNicknames() {
+            db.ref('friends/' + currentUser.uid).on('value', snap => { myFriendsData = snap.val() || {}; renderFriendsList(); });
+            db.ref('nicknames/' + currentUser.uid).on('value', snap => { myNicknamesData = snap.val() || {}; renderFriendsList(); });
+        }
+
+        function renderFriendsList() {
+            const list = document.getElementById('friends-list');
+            list.innerHTML = '';
+            for (const friendUid in myFriendsData) {
+                const username = myFriendsData[friendUid];
+                const displayName = myNicknamesData[friendUid] || username;
+
+                const item = document.createElement('div');
+                item.className = 'list-item';
+
+                const nameArea = document.createElement('div');
+                nameArea.className = 'friend-name-area';
+                const nameSpan = document.createElement('span');
+                nameSpan.innerText = displayName;
+                const dot = document.createElement('span');
+                dot.id = 'dot-' + friendUid;
+                dot.className = 'blue-dot hidden';
+                nameArea.appendChild(nameSpan);
+                nameArea.appendChild(dot);
+                item.appendChild(nameArea);
+
+                let pressTimer, longPressed = false;
+
+                // Normal tap/click opens the chat (unless a long-press just fired)
+                item.addEventListener('click', () => {
+                    if (longPressed) { longPressed = false; return; }
+                    openChat(friendUid, username);
+                });
+
+                // Right-click (desktop) -> set nickname
+                item.addEventListener('contextmenu', (e) => { e.preventDefault(); promptNickname(friendUid); });
+
+                // Tap-and-hold (mobile) -> set nickname
+                item.addEventListener('touchstart', () => {
+                    longPressed = false;
+                    pressTimer = setTimeout(() => { longPressed = true; promptNickname(friendUid); }, 500);
+                });
+                item.addEventListener('touchend', (e) => { clearTimeout(pressTimer); if (longPressed) e.preventDefault(); });
+                item.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+                list.appendChild(item);
+                startBackgroundListener(friendUid);
+            }
+        }
+
+        // ----- Friend nickname -----
+        let nicknameTargetUid = null;
+        function promptNickname(friendUid) {
+            nicknameTargetUid = friendUid;
+            const username = myFriendsData[friendUid] || '';
+            const current = myNicknamesData[friendUid] || '';
+            document.getElementById('nickname-sub').innerText = 'Nickname for ' + username + ' (only you see this). Leave blank to reset.';
+            const input = document.getElementById('nickname-input');
+            input.value = current;
+            input.placeholder = username;
+            document.getElementById('nickname-modal').classList.remove('hidden');
+            setTimeout(() => input.focus(), 50);
+        }
+        function closeNicknameModal() {
+            document.getElementById('nickname-modal').classList.add('hidden');
+            nicknameTargetUid = null;
+        }
+        function saveNickname() {
+            if (!firebaseReady || !currentUser || !nicknameTargetUid) { closeNicknameModal(); return; }
+            const val = document.getElementById('nickname-input').value.trim();
+            const ref = db.ref('nicknames/' + currentUser.uid + '/' + nicknameTargetUid);
+            if (val) ref.set(val); else ref.remove(); // blank reverts to username
+
+            // If this chat is open, update the header right away
+            if (currentChatData && currentChatData.uid === nicknameTargetUid) {
+                document.getElementById('chat-header-name').innerText = 'Chat with ' + (val || (myFriendsData[nicknameTargetUid] || ''));
+            }
+            closeNicknameModal();
+        }
+
+        // ==========================================
+        // GROUP CHATS LOGIC
+        // ==========================================
+        function loadGroups() {
+            if (!firebaseReady || !currentUser) return;
+            db.ref('userGroups/' + currentUser.uid).on('value', snap => {
+                myGroupsData = snap.val() || {};
+                renderGroupsList();
+            });
+        }
+
+        function renderGroupsList() {
+            const list = document.getElementById('groups-list');
+            if(!list) return;
+            list.innerHTML = '';
+            for (const groupId in myGroupsData) {
+                const groupName = myGroupsData[groupId].name;
+                const item = document.createElement('div');
+                item.className = 'list-item';
+                item.innerHTML = `<div class="friend-name-area"><span>👥 ${escapeHtml(groupName)}</span></div>`;
+                item.addEventListener('click', () => openGroupChat(groupId, groupName));
+                list.appendChild(item);
+                startGroupBackgroundListener(groupId);
+            }
+        }
+
+        function showCreateGroupModal() {
+            document.getElementById('create-group-modal').classList.remove('hidden');
+            const list = document.getElementById('group-friends-list');
+            list.innerHTML = '';
+            let count = 0;
+            for (const uid in myFriendsData) {
+                count++;
+                const name = myNicknamesData[uid] || myFriendsData[uid];
+                list.innerHTML += `<label style="display:block; padding: 6px 0; cursor:pointer;"><input type="checkbox" class="group-friend-cb" value="${uid}"> ${escapeHtml(name)}</label>`;
+            }
+            if (count === 0) list.innerHTML = '<p style="font-size:12px; color:#7f8c8d;">Add some friends first!</p>';
+        }
+
+        function closeCreateGroupModal() {
+            document.getElementById('create-group-modal').classList.add('hidden');
+            document.getElementById('group-name-input').value = '';
+        }
+
+        function submitCreateGroup() {
+            const name = document.getElementById('group-name-input').value.trim() || 'New Group';
+            const checkboxes = document.querySelectorAll('.group-friend-cb:checked');
+            if (checkboxes.length === 0) return alert('Select at least one friend.');
+            if (checkboxes.length > 9) return alert('You can only add up to 9 friends (10 members total).');
+            
+            const groupId = 'group_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+            const members = {};
+            members[currentUser.uid] = true;
+            checkboxes.forEach(cb => members[cb.value] = true);
+
+            db.ref(`groups/${groupId}`).set({ name: name, members: members });
+            for (let uid in members) {
+                db.ref(`userGroups/${uid}/${groupId}`).set({ name: name });
+            }
+            closeCreateGroupModal();
+        }
+
+        function startGroupBackgroundListener(groupId) {
+            if (!firebaseReady) return;
+            if (!backgroundListeners[groupId]) {
+                backgroundListeners[groupId] = true;
+                let seenFirst = false;
+                db.ref('chats/' + groupId).limitToLast(1).on('child_added', snap => {
+                    if (!seenFirst) { seenFirst = true; return; }
+                    const m = snap.val();
+                    if (m && m.sender !== currentUser.uid && !(m.unsent || m.type === 'unsent')) playBeepIn();
+                });
+            }
+        }
+
+        // ==========================================
+        // MEDIA CAPTURE LOGIC (Camera & Mic without Storage)
+        // ==========================================
+        function triggerCamera() {
+            if (!currentChatData) return; // need an open chat to send to
+            document.getElementById('camera-choice').classList.remove('hidden');
+        }
+
+        function closeCameraChoice() {
+            document.getElementById('camera-choice').classList.add('hidden');
+        }
+
+        // "Upload Image" -> open the gallery/file picker
+        function chooseFromGallery() {
+            closeCameraChoice();
+            document.getElementById('hidden-camera').click();
+        }
+
+        // "Take Photo" -> live in-app camera with a shutter
+        let cameraStream = null;
+        let currentFacingMode = 'environment';
+
+        async function startCamera() {
+            const video = document.getElementById('camera-stream');
+            stopCameraStream();
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: currentFacingMode }, audio: false
+                });
+            } catch (e) {
+                // Fall back to any available camera (e.g. laptops with one webcam)
+                try {
+                    cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                } catch (err) {
+                    return false;
+                }
+            }
+            video.srcObject = cameraStream;
+            return true;
+        }
+
+        function stopCameraStream() {
+            if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+        }
+
+        async function openLiveCamera() {
+            closeCameraChoice();
+            document.getElementById('live-camera').classList.remove('hidden');
+            const ok = await startCamera();
+            if (!ok) { alert("Camera permission denied or unavailable."); closeLiveCamera(); }
+        }
+
+        function closeLiveCamera() {
+            stopCameraStream();
+            document.getElementById('camera-stream').srcObject = null;
+            document.getElementById('live-camera').classList.add('hidden');
+        }
+
+        async function switchCamera() {
+            currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+            const ok = await startCamera();
+            if (!ok) alert("Could not switch camera.");
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById('camera-stream');
+            if (!video.videoWidth) return; // camera not ready yet
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 800; // match upload compression so it fits in Realtime DB
+            let w = video.videoWidth, h = video.videoHeight;
+            if (w > MAX_WIDTH) { h *= MAX_WIDTH / w; w = MAX_WIDTH; }
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+            const base64Data = canvas.toDataURL('image/jpeg', 0.6);
+            closeLiveCamera();
+            sendMediaMessage(base64Data, 'image');
+        }
+
+        function processImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            sendImageFile(file);
+            event.target.value = ''; // allow picking the same file again
+        }
+
+        // Shared image sender used by upload, camera, paste, and drag-drop.
+        // GIFs are sent as-is (canvas would flatten the animation); other images
+        // are resized/compressed so they fit in the Realtime Database.
+        function sendImageFile(file) {
+            if (!file || !currentChatData) return;
+            const reader = new FileReader();
+            if (file.type === 'image/gif') {
+                reader.onload = (e) => {
+                    const dataUrl = e.target.result;
+                    if (dataUrl.length > 9000000) { alert('That GIF is too large to send (over ~9 MB).'); return; }
+                    sendMediaMessage(dataUrl, 'image'); // keep animation
+                };
+                reader.readAsDataURL(file);
+            } else {
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 800; // Resize to save space
+                        let w = img.width, h = img.height;
+                        if (w > MAX_WIDTH) { h *= MAX_WIDTH / w; w = MAX_WIDTH; }
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        sendMediaMessage(canvas.toDataURL('image/jpeg', 0.6), 'image');
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        async function toggleRecording() {
+            const btn = document.getElementById('mic-btn');
+            if(!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+
+                    // Pick a MIME type the browser actually supports, so the
+                    // recording is a valid, playable file (the old code left this
+                    // blank, which produced audio that wouldn't play back).
+                    let recordType = '';
+                    const candidates = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus','audio/ogg'];
+                    if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+                        for (const c of candidates) { if (MediaRecorder.isTypeSupported(c)) { recordType = c; break; } }
+                    }
+                    mediaRecorder = recordType ? new MediaRecorder(stream, { mimeType: recordType }) : new MediaRecorder(stream);
+                    isRecording = true;
+                    btn.classList.add('recording');
+                    btn.innerText = '⏹'; 
+                    audioChunks = [];
+
+                    mediaRecorder.addEventListener("dataavailable", event => {
+                        if (event.data && event.data.size > 0) audioChunks.push(event.data);
+                    });
+
+                    mediaRecorder.addEventListener("stop", () => {
+                        const type = mediaRecorder.mimeType || recordType || 'audio/webm';
+                        const audioBlob = new Blob(audioChunks, { type }); // tagged type = plays correctly
+                        const reader = new FileReader();
+                        reader.readAsDataURL(audioBlob); // Convert Audio to Base64 Text
+                        reader.onloadend = () => {
+                            sendMediaMessage(reader.result, 'audio');
+                        };
+                    });
+
+                    mediaRecorder.start();
+                } catch(e) {
+                    alert("Microphone permission denied.");
+                }
+            } else {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(t => t.stop()); // Turn off mic
+                isRecording = false;
+                btn.classList.remove('recording');
+                btn.innerText = '🎤';
+            }
+        }
+
+        function sendMediaMessage(base64Data, mediaType, fileMeta) {
+            if (!currentChatData) return;
+            const msgData = {
+                sender: currentUser.uid, senderName: myUsername, text: base64Data, type: mediaType,
+                status: 'sent', timestamp: firebase.database.ServerValue.TIMESTAMP
+            };
+            if (fileMeta) msgData.fileMeta = fileMeta;
+            db.ref('chats/' + currentChatData.chatId).push(msgData);
+            playBeepOut();
+        }
+
+        // ==========================================
+        // FILE ATTACHMENT LOGIC
+        // ==========================================
+        function triggerFileAttach() {
+            if (!currentChatData) return;
+            document.getElementById('hidden-file-attach').click();
+        }
+
+        function processFileAttachment(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            event.target.value = '';
+
+            // Images still go through the image path for inline preview
+            if (file.type && file.type.startsWith('image/')) {
+                sendImageFile(file);
+                return;
+            }
+
+            const MAX_FILE_MB = 8;
+            if (file.size > MAX_FILE_MB * 1024 * 1024) {
+                alert(`File too large. Max ${MAX_FILE_MB} MB.`);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                sendMediaMessage(e.target.result, 'file', { name: file.name, size: file.size, type: file.type });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function getFileIcon(filename) {
+            const ext = (filename.split('.').pop() || '').toLowerCase();
+            const map = {
+                pdf: '📄', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊',
+                ppt: '📑', pptx: '📑', zip: '🗜️', rar: '🗜️', '7z': '🗜️',
+                mp3: '🎵', wav: '🎵', ogg: '🎵', aac: '🎵', flac: '🎵',
+                mp4: '🎬', mov: '🎬', avi: '🎬', mkv: '🎬', webm: '🎬',
+                txt: '📃', csv: '📊', json: '📋', xml: '📋', html: '🌐',
+                js: '💻', py: '💻', java: '💻', c: '💻', cpp: '💻',
+                apk: '📱', exe: '⚙️', dmg: '💿',
+            };
+            return map[ext] || '📁';
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // ==========================================
+        // GROUP CALLS (WebRTC mesh over Firebase)
+        // ==========================================
+        // Architecture: simple mesh — every participant peers with every other.
+        // Firebase path: groupCalls/<groupId>/<callId>/participants/<uid>/
+        //   { username, type, status: ringing|joined|declined, offer, answer, candidates/<remoteUid>/<key> }
+
+        let gcState = null; // { groupId, groupName, callId, type, localStream, peers: { uid -> pc } }
+        let gcIncoming = null; // { groupId, groupName, callId, type, callerName }
+
+        function startGroupCall(type) {
+            if (!firebaseReady) { alert('Not connected to Firebase.'); return; }
+            if (!currentChatData) { alert('No chat open.'); return; }
+            if (!currentChatData.isGroup) { alert('Not a group chat.'); return; }
+            if (gcState) { alert('You are already in a group call.'); return; }
+
+            const groupId = currentChatData.groupId;
+            const groupName = currentChatData.name;
+            const callId = 'gc_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+
+            // Fetch group members, then ring all of them
+            db.ref('groups/' + groupId + '/members').once('value').then(snap => {
+                const members = snap.val() || {};
+                const myPartRef = db.ref('groupCalls/' + groupId + '/' + callId + '/participants/' + currentUser.uid);
+                const metaRef   = db.ref('groupCalls/' + groupId + '/' + callId + '/meta');
+
+                // Write our own participant node
+                myPartRef.set({ username: myUsername, type: type, status: 'joined' });
+                myPartRef.onDisconnect().update({ status: 'left' });
+                metaRef.set({ caller: currentUser.uid, callerName: myUsername, type: type, groupName: groupName, startedAt: firebase.database.ServerValue.TIMESTAMP });
+
+                // Ring ALL other members regardless of known presence (they may be friends-of-friends)
+                for (const uid in members) {
+                    if (uid === currentUser.uid) continue;
+                    // Check presence — fall back to ringing anyway if we don't have data
+                    const online = presenceData[uid];
+                    // If we don't know their presence, still send the invite (they'll ignore it if offline)
+                    db.ref('groupCallInvites/' + uid + '/' + callId).set({
+                        groupId, groupName, callId, type,
+                        callerName: myUsername, callerUid: currentUser.uid
+                    });
+                }
+
+                // Initialize our call state
+                initGcState(groupId, groupName, callId, type);
+            }).catch(e => { alert('Error starting group call: ' + e.message); });
+        }
+
+        function initGcState(groupId, groupName, callId, type) {
+            gcState = { groupId, groupName, callId, type, localStream: null, peers: {}, peerNames: {} };
+
+            const audioC = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+            // For video try camera first, fall back to audio-only if camera denied
+            const videoConstraints = { audio: audioC, video: { facingMode: 'user' } };
+            const audioConstraints = { audio: audioC, video: false };
+            const constraints = (type === 'video') ? videoConstraints : audioConstraints;
+
+            const doInit = (stream) => {
+                if (!gcState) return; // was cancelled
+                gcState.localStream = stream;
+                showGroupCallScreen(groupName, gcState.type);
+
+                // Add my own tile
+                addParticipantTile(currentUser.uid, myUsername, stream, true);
+
+                // Listen for other participants joining/leaving
+                const partRef = db.ref('groupCalls/' + groupId + '/' + callId + '/participants');
+                gcState._partRef = partRef;
+                partRef.on('child_added', snap => {
+                    const uid = snap.key;
+                    const data = snap.val() || {};
+                    if (uid === currentUser.uid) return;
+                    if (data.status === 'joined') {
+                        gcState.peerNames[uid] = data.username || uid;
+                        maybeInitiatePeer(uid, data.username);
+                    }
+                });
+                partRef.on('child_changed', snap => {
+                    const uid = snap.key;
+                    const data = snap.val() || {};
+                    if (uid === currentUser.uid) return;
+                    if (data.status === 'joined') {
+                        gcState.peerNames[uid] = data.username || uid;
+                        if (!gcState.peers[uid]) maybeInitiatePeer(uid, data.username);
+                    } else if (data.status === 'left' || data.status === 'declined') {
+                        removeParticipantTile(uid);
+                        if (gcState.peers[uid]) { try { gcState.peers[uid].close(); } catch(e){} delete gcState.peers[uid]; }
+                        checkGroupCallEmpty();
+                    }
+                });
+
+                // Listen for ICE candidates from others aimed at me
+                listenForGcCandidates(groupId, callId);
+
+                // Listen for offers/answers addressed to me
+                listenForGcSignals(groupId, callId);
+
+                updateGcStatus();
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints).then(doInit).catch(err => {
+                if (type === 'video') {
+                    // Fall back to audio-only if camera access fails
+                    navigator.mediaDevices.getUserMedia(audioConstraints).then(stream => {
+                        gcState.type = 'audio'; // downgrade
+                        doInit(stream);
+                    }).catch(e2 => {
+                        alert('Could not access microphone. Please allow microphone permission and try again.\n\n' + e2.message);
+                        cleanupGcState();
+                    });
+                } else {
+                    alert('Could not access microphone. Please allow microphone permission and try again.\n\n' + err.message);
+                    cleanupGcState();
+                }
+            });
+        }
+
+        function maybeInitiatePeer(remoteUid, remoteName) {
+            // The participant with the "lower" UID initiates the offer
+            if (currentUser.uid < remoteUid) {
+                createGcPeer(remoteUid, remoteName, true);
+            }
+            // else we wait for an offer from them via listenForGcSignals
+        }
+
+        function createGcPeer(remoteUid, remoteName, isOfferer) {
+            if (!gcState || gcState.peers[remoteUid]) return;
+            const pc = new RTCPeerConnection(ICE_SERVERS);
+            gcState.peers[remoteUid] = pc;
+
+            gcState.localStream.getTracks().forEach(t => pc.addTrack(t, gcState.localStream));
+
+            pc.onicecandidate = (e) => {
+                if (!e.candidate || !gcState) return;
+                const key = 'from_' + currentUser.uid.slice(0,8) + '_to_' + remoteUid.slice(0,8);
+                db.ref(`groupCalls/${gcState.groupId}/${gcState.callId}/candidates/${key}`).push(e.candidate.toJSON());
+            };
+
+            pc.ontrack = (e) => {
+                const stream = e.streams[0];
+                const existing = document.getElementById('gc-tile-' + remoteUid);
+                if (existing) {
+                    const v = existing.querySelector('video');
+                    if (v) { v.srcObject = stream; v.play().catch(()=>{}); }
+                } else {
+                    addParticipantTile(remoteUid, remoteName || gcState.peerNames[remoteUid] || remoteUid, stream, false);
+                }
+                updateGcStatus();
+            };
+
+            pc.onconnectionstatechange = () => {
+                if (!pc || !gcState) return;
+                if (pc.connectionState === 'failed') {
+                    removeParticipantTile(remoteUid);
+                    try { pc.close(); } catch(e) {}
+                    delete gcState.peers[remoteUid];
+                    checkGroupCallEmpty();
+                }
+            };
+
+            if (isOfferer) {
+                pc.createOffer().then(offer => {
+                    return pc.setLocalDescription(offer).then(() => {
+                        db.ref(`groupCalls/${gcState.groupId}/${gcState.callId}/signals/${remoteUid.slice(0,8)}_from_${currentUser.uid.slice(0,8)}`).set({
+                            type: 'offer', sdp: offer.sdp, from: currentUser.uid, fromName: myUsername
+                        });
+                    });
+                }).catch(e => console.warn('GC offer error', e));
+            }
+        }
+
+        function listenForGcSignals(groupId, callId) {
+            // Offers/answers addressed to ME: key = "<theirShort>_from_<myShort>" means it's for me FROM them
+            db.ref(`groupCalls/${groupId}/${callId}/signals`).on('child_added', snap => {
+                const key = snap.key; // e.g. "myShortUid_from_theirShortUid"
+                const myShort = currentUser.uid.slice(0, 8);
+                if (!key.startsWith(myShort + '_from_')) return;
+                const data = snap.val();
+                if (!data || !gcState) return;
+                const remoteUid = data.from; // full UID stored in the value
+
+                if (data.type === 'offer') {
+                    // Create peer if not yet created (we're the answerer)
+                    if (!gcState.peers[remoteUid]) createGcPeer(remoteUid, data.fromName, false);
+                    const pc = gcState.peers[remoteUid];
+                    if (!pc) return;
+                    pc.setRemoteDescription({ type: 'offer', sdp: data.sdp }).then(() => {
+                        return pc.createAnswer();
+                    }).then(answer => {
+                        return pc.setLocalDescription(answer).then(() => {
+                            // Answer goes back: key = "<theirShort>_from_<myShort>" so THEY pick it up
+                            db.ref(`groupCalls/${groupId}/${callId}/signals/${remoteUid.slice(0,8)}_from_${myShort}`).set({
+                                type: 'answer', sdp: answer.sdp, from: currentUser.uid, fromName: myUsername
+                            });
+                        });
+                    }).catch(e => console.warn('GC answer error', e));
+                } else if (data.type === 'answer') {
+                    const pc = gcState.peers[remoteUid];
+                    if (pc && pc.signalingState === 'have-local-offer') {
+                        pc.setRemoteDescription({ type: 'answer', sdp: data.sdp }).catch(e => console.warn('GC set answer', e));
+                    }
+                }
+            });
+        }
+
+        function listenForGcCandidates(groupId, callId) {
+            const myShort = currentUser.uid.slice(0, 8);
+            db.ref(`groupCalls/${groupId}/${callId}/candidates`).on('child_added', snap => {
+                const key = snap.key; // "from_<senderShort>_to_<myShort>"
+                if (!key.endsWith('_to_' + myShort)) return;
+                // Extract sender short UID from key: "from_XXXXXXXX_to_YYYYYYYY"
+                const parts = key.split('_');
+                const senderShort = parts[1];
+                // Find the full UID matching this short
+                const remoteUid = Object.keys(gcState ? gcState.peers : {}).find(uid => uid.startsWith(senderShort))
+                               || Object.keys(gcState ? gcState.peerNames : {}).find(uid => uid.startsWith(senderShort));
+                
+                snap.ref.on('child_added', candSnap => {
+                    const cand = candSnap.val();
+                    if (!cand || !gcState) return;
+                    // Match by short prefix if we don't have full UID yet
+                    let pc = null;
+                    if (remoteUid) {
+                        pc = gcState.peers[remoteUid];
+                    } else {
+                        // Scan peers by short prefix
+                        for (const uid in gcState.peers) {
+                            if (uid.startsWith(senderShort)) { pc = gcState.peers[uid]; break; }
+                        }
+                    }
+                    if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+                        pc.addIceCandidate(cand).catch(() => {});
+                    }
+                });
+            });
+        }
+
+        function showGroupCallScreen(groupName, type) {
+            document.getElementById('group-call-screen').classList.remove('hidden');
+            document.getElementById('gc-title').innerText = '👥 ' + groupName;
+            document.getElementById('gc-status').innerText = 'Connecting…';
+            document.getElementById('gc-videos').innerHTML = '';
+            if (type !== 'video') {
+                document.getElementById('gc-cam-btn').style.display = 'none';
+            } else {
+                document.getElementById('gc-cam-btn').style.display = 'flex';
+            }
+        }
+
+        function hideGroupCallScreen() {
+            document.getElementById('group-call-screen').classList.add('hidden');
+            document.getElementById('gc-videos').innerHTML = '';
+        }
+
+        function addParticipantTile(uid, name, stream, isLocal) {
+            if (document.getElementById('gc-tile-' + uid)) return;
+            const tile = document.createElement('div');
+            tile.className = 'participant-tile';
+            tile.id = 'gc-tile-' + uid;
+
+            const hasVideo = stream && stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled;
+            if (hasVideo) {
+                const v = document.createElement('video');
+                v.autoplay = true; v.playsInline = true;
+                if (isLocal) { v.muted = true; v.style.transform = 'scaleX(-1)'; }
+                v.srcObject = stream;
+                v.play().catch(()=>{});
+                tile.appendChild(v);
+            } else {
+                const init = document.createElement('div');
+                init.className = 'p-initial';
+                init.innerText = (name || '?').charAt(0).toUpperCase();
+                tile.appendChild(init);
+            }
+
+            const nameEl = document.createElement('div');
+            nameEl.className = 'p-name';
+            nameEl.innerText = (isLocal ? '(You) ' : '') + (name || uid);
+            tile.appendChild(nameEl);
+
+            document.getElementById('gc-videos').appendChild(tile);
+        }
+
+        function removeParticipantTile(uid) {
+            const tile = document.getElementById('gc-tile-' + uid);
+            if (tile) tile.remove();
+        }
+
+        function updateGcStatus() {
+            if (!gcState) return;
+            const count = document.getElementById('gc-videos').querySelectorAll('.participant-tile').length;
+            document.getElementById('gc-status').innerText = count + ' participant' + (count !== 1 ? 's' : '');
+        }
+
+        function checkGroupCallEmpty() {
+            if (!gcState) return;
+            updateGcStatus();
+            // If only me left, show a message but don't auto-end — user can choose to leave
+        }
+
+        function leaveGroupCall() {
+            if (!gcState) return;
+            db.ref(`groupCalls/${gcState.groupId}/${gcState.callId}/participants/${currentUser.uid}/status`).set('left');
+            cleanupGcState();
+        }
+
+        function cleanupGcState() {
+            if (!gcState) return;
+            const saved = gcState;
+            gcState = null; // set to null first to prevent re-entry
+
+            // Close all peer connections
+            for (const uid in saved.peers) {
+                try { saved.peers[uid].close(); } catch(e) {}
+            }
+            if (saved.localStream) saved.localStream.getTracks().forEach(t => t.stop());
+
+            // Detach Firebase listeners
+            if (saved._partRef) saved._partRef.off();
+            db.ref(`groupCalls/${saved.groupId}/${saved.callId}/signals`).off();
+            db.ref(`groupCalls/${saved.groupId}/${saved.callId}/candidates`).off();
+
+            hideGroupCallScreen();
+        }
+
+        function gcToggleMute() {
+            if (!gcState || !gcState.localStream) return;
+            const track = gcState.localStream.getAudioTracks()[0];
+            if (!track) return;
+            track.enabled = !track.enabled;
+            const btn = document.getElementById('gc-mute-btn');
+            btn.innerText = track.enabled ? '🎤' : '🔇';
+            btn.classList.toggle('off', !track.enabled);
+        }
+
+        function gcToggleCam() {
+            if (!gcState || !gcState.localStream) return;
+            const track = gcState.localStream.getVideoTracks()[0];
+            if (!track) return;
+            track.enabled = !track.enabled;
+            const btn = document.getElementById('gc-cam-btn');
+            btn.innerText = track.enabled ? '📹' : '🚫';
+            btn.classList.toggle('off', !track.enabled);
+        }
+
+        // ---- Incoming group call invite listener ----
+        function setupGroupCallInviteListener() {
+            if (!firebaseReady || !currentUser) return;
+            db.ref('groupCallInvites/' + currentUser.uid).on('child_added', snap => {
+                const data = snap.val();
+                if (!data) return;
+                snap.ref.remove(); // consume it
+                if (gcState) return; // already in a call
+                gcIncoming = data;
+                showGroupCallInvite(data);
+            });
+        }
+
+        function showGroupCallInvite(data) {
+            document.getElementById('incoming-gc-text').innerText = (data.callerName || 'Someone') + ' started a group call';
+            document.getElementById('incoming-gc-sub').innerText = (data.type === 'video' ? 'Video' : 'Voice') + ' call · ' + (data.groupName || 'Group');
+            document.getElementById('incoming-group-call').classList.remove('hidden');
+            startRingtone();
+        }
+
+        function hideGroupCallInvite() {
+            document.getElementById('incoming-group-call').classList.add('hidden');
+            stopRingtone();
+        }
+
+        function joinGroupCall() {
+            if (!gcIncoming) return;
+            const data = gcIncoming;
+            gcIncoming = null;
+            hideGroupCallInvite();
+
+            // Mark ourselves as joined in Firebase
+            db.ref(`groupCalls/${data.groupId}/${data.callId}/participants/${currentUser.uid}`).set({
+                username: myUsername, type: data.type, status: 'joined'
+            });
+            db.ref(`groupCalls/${data.groupId}/${data.callId}/participants/${currentUser.uid}`).onDisconnect().update({ status: 'left' });
+
+            initGcState(data.groupId, data.groupName, data.callId, data.type);
+        }
+
+        function declineGroupCall() {
+            if (!gcIncoming) return;
+            const data = gcIncoming;
+            gcIncoming = null;
+            hideGroupCallInvite();
+            db.ref(`groupCalls/${data.groupId}/${data.callId}/participants/${currentUser.uid}`).set({
+                username: myUsername, type: data.type, status: 'declined'
+            });
+        }
+
+        // A bare image/GIF link (e.g. pasted from "Copy image address") -> send as an
+        // inline image that animates, instead of a plain text link.
+        function isImageUrl(text) {
+            if (/\s/.test(text)) return false; // must be a single URL, no other text
+            return /^https?:\/\/\S+\.(gif|png|jpe?g|webp)(\?\S*)?$/i.test(text)
+                || /^https?:\/\/(media\d*\.giphy\.com|i\.giphy\.com|media\d*\.tenor\.com|c\.tenor\.com)\/\S+/i.test(text);
+        }
+
+        function sendTextMessage() {
+            if (!currentChatData) return;
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            if (isImageUrl(text)) {
+                sendMediaMessage(text, 'image'); // renders + animates inline
+            } else {
+                db.ref('chats/' + currentChatData.chatId).push({
+                    sender: currentUser.uid, senderName: myUsername, text: text, type: 'text',
+                    status: 'sent', timestamp: firebase.database.ServerValue.TIMESTAMP
+                });
+                playBeepOut();
+            }
+            input.value = '';
+            clearTimeout(typingTimeout);
+            if (firebaseReady) db.ref(`typing/${currentChatData.chatId}/${currentUser.uid}`).remove();
+        }
+
+        // ==========================================
+        // CHAT LOGIC & REACTIONS
+        // ==========================================
+        let currentMessagesRef = null;
+
+        function startBackgroundListener(friendUid) {
+            if (!firebaseReady) return;
+            if (!backgroundListeners[friendUid]) {
+                backgroundListeners[friendUid] = true;
+                db.ref('presence/' + friendUid).on('value', snap => {
+                    presenceData[friendUid] = (snap.val() === true);
+                    applyPresenceDot(friendUid);
+                    // If I'm chatting with this person, their online/offline state
+                    // flips my receipts between Delivered and Sent.
+                    if (currentChatData && currentChatData.uid === friendUid) refreshSentReceipts();
+                });
+
+                // Beep on a NEW incoming message from this friend (any chat, even if not open).
+                const chatId = currentUser.uid < friendUid ? currentUser.uid + "_" + friendUid : friendUid + "_" + currentUser.uid;
+                let seenFirst = false;
+                db.ref('chats/' + chatId).limitToLast(1).on('child_added', snap => {
+                    if (!seenFirst) { seenFirst = true; return; } // skip the message already there on load
+                    const m = snap.val();
+                    if (m && m.sender !== currentUser.uid && !(m.unsent || m.type === 'unsent')) playBeepIn();
+                });
+            }
+            applyPresenceDot(friendUid); // reflect known state after a re-render
+        }
+
+        function applyPresenceDot(friendUid) {
+            const dot = document.getElementById('dot-' + friendUid);
+            if (!dot) return;
+            if (presenceData[friendUid]) dot.classList.remove('hidden');
+            else dot.classList.add('hidden');
+        }
+
+        // Mark myself online while connected; auto-clear if I disconnect.
+        function setupPresence() {
+            if (!firebaseReady || !currentUser) return;
+            const myPresence = db.ref('presence/' + currentUser.uid);
+            db.ref('.info/connected').on('value', snap => {
+                if (snap.val() === true) {
+                    myPresence.onDisconnect().set(false);
+                    myPresence.set(true);
+                }
+            });
+        }
+        function closeMobileChat() {
+            if (currentChatData && firebaseReady) db.ref(`typing/${currentChatData.chatId}/${currentUser.uid}`).remove();
+            if (currentTypingRef) { currentTypingRef.off(); currentTypingRef = null; }
+            document.getElementById('chat-area').classList.remove('mobile-active');
+            document.getElementById('voice-call-btn').classList.add('hidden');
+            document.getElementById('video-call-btn').classList.add('hidden');
+            document.getElementById('group-call-btn').classList.add('hidden');
+            document.getElementById('group-video-call-btn').classList.add('hidden');
+            document.getElementById('typing-indicator').classList.add('hidden');
+            currentChatData = null;
+        }
+
+        function openChat(friendUid, originalUsername) {
+            // stop my "typing" in the chat I'm leaving
+            if (currentChatData && firebaseReady) db.ref(`typing/${currentChatData.chatId}/${currentUser.uid}`).remove();
+
+            const chatArea = document.getElementById('chat-area');
+            chatArea.classList.remove('hidden');
+            chatArea.classList.add('mobile-active');
+            
+            const displayName = myNicknamesData[friendUid] || originalUsername;
+            document.getElementById('chat-header-name').innerText = "Chat with " + displayName;
+            document.getElementById('voice-call-btn').classList.remove('hidden');
+            document.getElementById('video-call-btn').classList.remove('hidden');
+            document.getElementById('group-call-btn').classList.add('hidden');
+            document.getElementById('group-video-call-btn').classList.add('hidden');
+            document.getElementById('typing-indicator').classList.add('hidden');
+            document.getElementById('messages').innerHTML = ''; 
+
+            const chatId = currentUser.uid < friendUid ? currentUser.uid + "_" + friendUid : friendUid + "_" + currentUser.uid;
+            currentChatData = { uid: friendUid, username: originalUsername, chatId: chatId };
+            currentMessages = {};
+
+            if (currentMessagesRef) currentMessagesRef.off();
+            currentMessagesRef = db.ref('chats/' + chatId);
+            
+            currentMessagesRef.on('child_added', snap => {
+                renderMessage(snap.key, snap.val());
+                maybeMarkRead(snap.key, snap.val(), chatId);   // I'm looking at this chat -> mark their msgs read
+            });
+            currentMessagesRef.on('child_changed', snap => updateMessageUI(snap.key, snap.val()));
+
+            // Listen for the other person typing
+            if (currentTypingRef) currentTypingRef.off();
+            currentTypingRef = db.ref(`typing/${chatId}/${friendUid}`);
+            currentTypingRef.on('value', snap => {
+                const indicator = document.getElementById('typing-indicator');
+                if (snap.val()) { indicator.innerText = displayName + ' is typing…'; indicator.classList.remove('hidden'); }
+                else { indicator.classList.add('hidden'); }
+            });
+        }
+
+        function openGroupChat(groupId, groupName) {
+            if (currentChatData && firebaseReady) db.ref(`typing/${currentChatData.chatId}/${currentUser.uid}`).remove();
+            if (currentTypingRef) { currentTypingRef.off(); currentTypingRef = null; }
+
+            const chatArea = document.getElementById('chat-area');
+            chatArea.classList.remove('hidden');
+            chatArea.classList.add('mobile-active');
+            
+            document.getElementById('chat-header-name').innerText = "Group: " + groupName;
+            document.getElementById('voice-call-btn').classList.add('hidden'); // hidden for groups
+            document.getElementById('video-call-btn').classList.add('hidden'); // hidden for groups
+            document.getElementById('group-call-btn').classList.remove('hidden');
+            document.getElementById('group-video-call-btn').classList.remove('hidden');
+            document.getElementById('typing-indicator').classList.add('hidden');
+            document.getElementById('messages').innerHTML = ''; 
+
+            currentChatData = { isGroup: true, groupId: groupId, name: groupName, chatId: groupId };
+            currentMessages = {};
+
+            if (currentMessagesRef) currentMessagesRef.off();
+            currentMessagesRef = db.ref('chats/' + groupId);
+            
+            currentMessagesRef.on('child_added', snap => {
+                renderMessage(snap.key, snap.val());
+                maybeMarkRead(snap.key, snap.val(), groupId);
+            });
+            currentMessagesRef.on('child_changed', snap => updateMessageUI(snap.key, snap.val()));
+
+            // Listen for any person typing in the group
+            currentTypingRef = db.ref(`typing/${groupId}`);
+            currentTypingRef.on('value', snap => {
+                const indicator = document.getElementById('typing-indicator');
+                const typists = snap.val() || {};
+                let count = 0;
+                for(let uid in typists) { if (uid !== currentUser.uid && typists[uid]) count++; }
+                if (count > 0) { 
+                    indicator.innerText = (count === 1 ? 'Someone is' : count + ' people are') + ' typing…'; 
+                    indicator.classList.remove('hidden'); 
+                } else { 
+                    indicator.classList.add('hidden'); 
+                }
+            });
+        }
+
+        function renderMessage(msgKey, msg) {
+            const isMe = msg.sender === currentUser.uid;
+            const timeString = new Date(msg.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-container ' + (isMe ? 'sent' : 'received');
+            wrapper.id = 'msg-wrapper-' + msgKey;
+
+            const bubble = document.createElement('div');
+            bubble.className = 'msg ' + (isMe ? 'sent' : 'received');
+
+            // Handle Media Types (No Storage)
+            if (msg.unsent || msg.type === 'unsent') {
+                bubble.classList.add('unsent-bubble');
+                let friendName = 'They';
+                if (currentChatData && currentChatData.isGroup) {
+                    friendName = msg.senderName || 'Someone';
+                } else if (currentChatData) {
+                    friendName = (myNicknamesData[currentChatData.uid] || currentChatData.username) || 'They';
+                }
+                bubble.innerText = isMe ? 'You unsent a message' : (friendName + ' unsent a message');
+            } else {
+                if (currentChatData && currentChatData.isGroup && !isMe) {
+                    const sn = document.createElement('div');
+                    sn.style.fontSize = '11px';
+                    sn.style.fontWeight = 'bold';
+                    sn.style.color = '#34495e';
+                    sn.style.marginBottom = '4px';
+                    sn.innerText = msg.senderName || 'Someone';
+                    bubble.appendChild(sn);
+                }
+
+                if (msg.type === 'image') {
+                    const img = document.createElement('img');
+                    img.src = msg.text; img.className = 'media-content';
+                    bubble.appendChild(img);
+                } else if (msg.type === 'audio') {
+                    const au = document.createElement('audio');
+                    au.controls = true; au.src = msg.text; au.className = 'audio-player';
+                    bubble.appendChild(au);
+                } else if (msg.type === 'file') {
+                    const meta = msg.fileMeta || {};
+                    const attach = document.createElement('a');
+                    attach.className = 'file-attachment';
+                    attach.href = msg.text;
+                    attach.download = meta.name || 'file';
+                    attach.title = 'Download ' + (meta.name || 'file');
+                    const icon = getFileIcon(meta.name || '');
+                    const sizeStr = meta.size ? formatFileSize(meta.size) : '';
+                    attach.innerHTML = `<span class="file-attachment-icon">${icon}</span><div class="file-attachment-info"><div class="file-attachment-name">${escapeHtml(meta.name || 'File')}</div>${sizeStr ? `<div class="file-attachment-size">${sizeStr}</div>` : ''}</div><span class="file-download-btn">⬇️</span>`;
+                    bubble.appendChild(attach);
+                } else {
+                    const url = firstUrl(msg.text);
+                    if (url) {
+                        const txtNode = document.createElement('span');
+                        txtNode.innerHTML = linkify(msg.text); // clickable links open in a new tab
+                        bubble.appendChild(txtNode);
+                        
+                        const preview = document.createElement('a');
+                        preview.className = 'link-preview';
+                        preview.href = url; preview.target = '_blank'; preview.rel = 'noopener noreferrer';
+                        preview.innerHTML = `<div class="link-preview-body"><div class="link-preview-domain">${escapeHtml(getDomain(url))}</div><div class="link-preview-title">Loading preview…</div></div>`;
+                        bubble.appendChild(preview);
+                        fetchLinkPreview(url, preview);
+                    } else {
+                        const txtNode = document.createElement('span');
+                        txtNode.innerText = msg.text;
+                        bubble.appendChild(txtNode); // Default Text
+                    }
+                }
+            }
+
+            // Apple-Style Reaction + Unsend Triggers (skip on already-unsent messages)
+            if (!(msg.unsent || msg.type === 'unsent')) {
+                let pressTimer;
+                bubble.addEventListener('contextmenu', (e) => { e.preventDefault(); showReactionMenu(e, msgKey, isMe); });
+                bubble.addEventListener('touchstart', (e) => { pressTimer = setTimeout(() => { e.preventDefault(); showReactionMenu(e, msgKey, isMe); }, 500); });
+                bubble.addEventListener('touchend', () => clearTimeout(pressTimer));
+                bubble.addEventListener('touchmove', () => clearTimeout(pressTimer));
+            }
+
+            const reactionsBox = document.createElement('div');
+            reactionsBox.className = 'reactions-box hidden';
+            reactionsBox.id = 'reactions-' + msgKey;
+
+            const meta = document.createElement('div');
+            meta.className = 'meta-data';
+            meta.innerHTML = `<span class="meta-time">${timeString}</span> <span id="receipt-${msgKey}"></span>`;
+
+            wrapper.appendChild(bubble);
+            wrapper.appendChild(reactionsBox);
+            wrapper.appendChild(meta);
+            document.getElementById('messages').appendChild(wrapper);
+            
+            updateMessageUI(msgKey, msg); // Call this immediately to render any existing reactions
+            const container = document.getElementById('messages');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateMessageUI(msgKey, msg) {
+            currentMessages[msgKey] = msg; // remember latest state for receipt refreshes
+
+            // If the message was unsent (possibly after it was first rendered),
+            // replace its content for BOTH sides and stop here.
+            if (msg.unsent || msg.type === 'unsent') {
+                const wrapper = document.getElementById('msg-wrapper-' + msgKey);
+                if (wrapper) {
+                    const isMe = msg.sender === currentUser.uid;
+                    const bubble = wrapper.querySelector('.msg');
+                    if (bubble) {
+                        let friendName = 'They';
+                        if (currentChatData && currentChatData.isGroup) friendName = msg.senderName || 'Someone';
+                        else if (currentChatData) friendName = (myNicknamesData[currentChatData.uid] || currentChatData.username) || 'They';
+                        
+                        bubble.classList.add('unsent-bubble');
+                        bubble.innerHTML = '';
+                        bubble.innerText = isMe ? 'You unsent a message' : (friendName + ' unsent a message');
+                    }
+                    const rb = document.getElementById('reactions-' + msgKey);
+                    if (rb) rb.classList.add('hidden');
+                    const receiptEl = document.getElementById('receipt-' + msgKey);
+                    if (receiptEl) receiptEl.innerText = '';
+                }
+                return;
+            }
+
+            renderReceipt(msgKey, msg);
+
+            // Render Apple Tapback Reactions
+            const reactionsBox = document.getElementById('reactions-' + msgKey);
+            if (reactionsBox) {
+                if (msg.reactions) {
+                    reactionsBox.classList.remove('hidden');
+                    // Get all unique emojis people reacted with
+                    const allReactions = Object.values(msg.reactions);
+                    reactionsBox.innerText = allReactions.join(' ');
+                } else {
+                    reactionsBox.classList.add('hidden');
+                }
+            }
+        }
+
+        // Receipt under MY messages:
+        //   Read       -> they opened this chat (sticky, stored in the database)
+        //   Delivered  -> they're online (have the website open) right now
+        //   Sent       -> they're offline
+        function renderReceipt(msgKey, msg) {
+            const el = document.getElementById('receipt-' + msgKey);
+            if (!el || !currentChatData || msg.sender !== currentUser.uid) return;
+            if (msg.unsent || msg.type === 'unsent') { el.innerText = ''; return; }
+            let text = "Sent ✓", color = "#95a5a6";
+            
+            if (currentChatData.isGroup) {
+                if (msg.status === 'read') { text = "Seen ✓✓"; color = "#3498db"; }
+            } else {
+                if (msg.status === 'read') { text = "Read ✓✓"; color = "#3498db"; }
+                else if (presenceData[currentChatData.uid]) { text = "Delivered ✓✓"; }
+            }
+            
+            el.style.color = color;
+            el.innerText = " • " + text;
+        }
+
+        function refreshSentReceipts() {
+            for (const k in currentMessages) renderReceipt(k, currentMessages[k]);
+        }
+
+        // While I'm viewing this chat, mark the other person's messages as read.
+        function maybeMarkRead(msgKey, msg, chatId) {
+            if (!firebaseReady || !currentChatData || currentChatData.chatId !== chatId) return;
+            if (msg.sender !== currentUser.uid && msg.status !== 'read') {
+                db.ref('chats/' + chatId + '/' + msgKey + '/status').set('read');
+            }
+        }
+
+        // ==========================================
+        // REACTION MENU LOGIC
+        // ==========================================
+        function showReactionMenu(e, msgKey, isMe) {
+            // Don't allow reacting to / unsending a message that's already unsent
+            const wrapper = document.getElementById('msg-wrapper-' + msgKey);
+            const bubbleEl = wrapper && wrapper.querySelector('.msg');
+            if (bubbleEl && bubbleEl.classList.contains('unsent-bubble')) return;
+
+            const menu = document.getElementById('reaction-menu');
+            activeReactionMsgKey = msgKey;
+            menu.classList.remove('hidden');
+
+            // Only offer "Unsend" on your own messages
+            const unsendRow = document.getElementById('unsend-row');
+            if (isMe) unsendRow.classList.remove('hidden');
+            else unsendRow.classList.add('hidden');
+
+            // Position menu where the user clicked/tapped
+            let x = e.clientX || (e.touches && e.touches[0].clientX);
+            let y = e.clientY || (e.touches && e.touches[0].clientY);
+
+            // Keep menu on screen
+            if (x > window.innerWidth - 220) x = window.innerWidth - 220;
+            if (x < 10) x = 10;
+
+            menu.style.left = x + 'px';
+            menu.style.top = (y - 60) + 'px'; // Pop up slightly above finger
+        }
+
+        function hideReactionMenu() {
+            document.getElementById('reaction-menu').classList.add('hidden');
+            activeReactionMsgKey = null;
+        }
+
+        // ----- Unsend flow -----
+        function confirmUnsend() {
+            pendingUnsendKey = activeReactionMsgKey;
+            hideReactionMenu();
+            if (!pendingUnsendKey || !currentChatData) return;
+            document.getElementById('unsend-confirm').classList.remove('hidden'); // "Are you sure?"
+        }
+
+        function closeUnsendConfirm() {
+            document.getElementById('unsend-confirm').classList.add('hidden');
+            pendingUnsendKey = null;
+        }
+
+        function doUnsend() {
+            const key = pendingUnsendKey;
+            document.getElementById('unsend-confirm').classList.add('hidden');
+            pendingUnsendKey = null;
+            if (!key || !currentChatData) return;
+            // Overwrite the message: clears the text/image/audio payload and reactions for everyone.
+            db.ref(`chats/${currentChatData.chatId}/${key}`).update({
+                unsent: true,
+                type: 'unsent',
+                text: '',
+                reactions: null
+            });
+        }
+
+        function applyReaction(emoji) {
+            if (!activeReactionMsgKey || !currentChatData) return;
+            const ref = db.ref(`chats/${currentChatData.chatId}/${activeReactionMsgKey}/reactions/${currentUser.uid}`);
+            
+            // If they click the same emoji, remove it. Otherwise, set it.
+            ref.once('value').then(snap => {
+                if (snap.val() === emoji) ref.remove(); 
+                else ref.set(emoji);
+            });
+            hideReactionMenu();
+        }
+
+        // ==========================================
+        // LINKS & WEBSITE PREVIEWS
+        // ==========================================
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+        function firstUrl(text) { const m = String(text).match(URL_REGEX); return m ? m[0] : null; }
+        function getDomain(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return url; } }
+
+        // Safely turn raw text into HTML with clickable links (escape everything,
+        // then wrap URLs in anchors that open in a new tab).
+        function linkify(rawText) {
+            const out = []; let last = 0; let m;
+            const re = new RegExp(URL_REGEX.source, 'g');
+            while ((m = re.exec(rawText)) !== null) {
+                if (m.index > last) out.push(escapeHtml(rawText.slice(last, m.index)));
+                let url = m[0], trail = '';
+                const tm = url.match(/[.,!?)\]}'"]+$/);
+                if (tm) { trail = url.slice(url.length - tm[0].length); url = url.slice(0, url.length - tm[0].length); }
+                const safe = escapeHtml(url);
+                out.push(`<a href="${safe}" target="_blank" rel="noopener noreferrer">${safe}</a>`);
+                if (trail) out.push(escapeHtml(trail));
+                last = m.index + m[0].length;
+            }
+            if (last < rawText.length) out.push(escapeHtml(rawText.slice(last)));
+            return out.join('');
+        }
+
+        // Fetch a small preview via Microlink (free, CORS-friendly). Falls back to
+        // a plain card if the request fails or is rate-limited.
+        function fetchLinkPreview(url, el) {
+            if (previewCache[url]) { renderPreview(el, url, previewCache[url]); return; }
+            fetch('https://api.microlink.io/?url=' + encodeURIComponent(url))
+                .then(r => r.json())
+                .then(json => {
+                    if (!json || json.status !== 'success' || !json.data) { renderBasicPreview(el, url); return; }
+                    previewCache[url] = json.data;
+                    renderPreview(el, url, json.data);
+                })
+                .catch(() => renderBasicPreview(el, url));
+        }
+        function renderPreview(el, url, d) {
+            const img = (d.image && d.image.url) ? d.image.url : ((d.logo && d.logo.url) ? d.logo.url : '');
+            const title = d.title || getDomain(url);
+            const desc = d.description ? d.description.slice(0, 120) : '';
+            let html = '';
+            if (img) html += `<img class="link-preview-img" src="${escapeHtml(img)}" onerror="this.style.display='none'">`;
+            html += `<div class="link-preview-body"><div class="link-preview-domain">${escapeHtml(getDomain(url))}</div><div class="link-preview-title">${escapeHtml(title)}</div>`;
+            if (desc) html += `<div class="link-preview-desc">${escapeHtml(desc)}</div>`;
+            html += `</div>`;
+            el.innerHTML = html;
+        }
+        function renderBasicPreview(el, url) {
+            el.innerHTML = `<div class="link-preview-body"><div class="link-preview-domain">${escapeHtml(getDomain(url))}</div><div class="link-preview-title">${escapeHtml(url)}</div></div>`;
+        }
+
+        // ==========================================
+        // PASTE / DRAG-DROP IMAGES & GIFS, TYPING
+        // ==========================================
+        function handlePaste(e) {
+            if (!currentChatData) return;
+            const cd = e.clipboardData;
+            if (!cd) return;
+
+            const hasImageItem = cd.items && Array.from(cd.items).some(it => it.type && it.type.indexOf('image') === 0);
+            const html = (cd.getData && cd.getData('text/html')) || '';
+            const plain = ((cd.getData && cd.getData('text/plain')) || '').trim();
+
+            // 1) Copying a GIF usually puts a flat still on the clipboard, but the page
+            //    HTML carries the real <img src="...gif">. Grab that so it stays animated.
+            if (html) {
+                const m = html.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);
+                let src = m && m[1];
+                if (src) src = src.replace(/&amp;/g, '&');
+                if (src && /^https?:\/\//i.test(src) && (hasImageItem || isImageUrl(src))) {
+                    e.preventDefault();
+                    sendMediaMessage(src, 'image'); // URL -> renders + animates inline
+                    return;
+                }
+            }
+
+            // 2) A bare image/GIF link pasted as text
+            if (plain && isImageUrl(plain)) {
+                e.preventDefault();
+                sendMediaMessage(plain, 'image');
+                return;
+            }
+
+            // 3) Raw image data on the clipboard (screenshots, copied images). True GIF
+            //    bytes stay animated; anything else is sent as a static image.
+            if (cd.items) {
+                for (let i = 0; i < cd.items.length; i++) {
+                    if (cd.items[i].type && cd.items[i].type.indexOf('image') === 0) {
+                        const file = cd.items[i].getAsFile();
+                        if (file) { e.preventDefault(); sendImageFile(file); return; }
+                    }
+                }
+            }
+            // otherwise: let normal text paste happen
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            if (!currentChatData) return;
+            const dt = e.dataTransfer;
+            if (!dt) return;
+
+            // Dragged a real file in
+            if (dt.files && dt.files.length) {
+                let sent = false;
+                for (let i = 0; i < dt.files.length; i++) {
+                    if (dt.files[i].type && dt.files[i].type.indexOf('image') === 0) { sendImageFile(dt.files[i]); sent = true; }
+                }
+                if (sent) return;
+            }
+            // Dragged a GIF/image from a webpage -> use its URL (keeps animation)
+            const html = (dt.getData && dt.getData('text/html')) || '';
+            if (html) {
+                const m = html.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);
+                let src = m && m[1];
+                if (src) src = src.replace(/&amp;/g, '&');
+                if (src && /^https?:\/\//i.test(src)) { sendMediaMessage(src, 'image'); return; }
+            }
+            const uri = ((dt.getData && (dt.getData('text/uri-list') || dt.getData('text/plain'))) || '').trim();
+            if (uri && isImageUrl(uri)) sendMediaMessage(uri, 'image');
+        }
+
+        function handleTypingInput() {
+            if (!currentChatData || !firebaseReady) return;
+            const ref = db.ref(`typing/${currentChatData.chatId}/${currentUser.uid}`);
+            ref.set(true);
+            ref.onDisconnect().remove();
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => ref.remove(), 2500);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('message-input');
+            if (input) input.addEventListener('input', handleTypingInput);
+            document.addEventListener('paste', handlePaste);
+            const ca = document.getElementById('chat-area');
+            if (ca) {
+                ca.addEventListener('dragover', e => e.preventDefault());
+                ca.addEventListener('drop', handleDrop);
+            }
+            initSounds();
+            setAppHeight();
+            updateSoundToggleUI();
+        });
+
+        // Size the app to the REAL visible height (fixes phones where 100vh hides
+        // content behind the address bar). Re-measure on resize/rotate.
+        function setAppHeight() {
+            document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+        }
+        window.addEventListener('resize', setAppHeight);
+        window.addEventListener('orientationchange', () => setTimeout(setAppHeight, 200));
+
+        // ==========================================
+        // SOUNDS (ringtone + message beeps, generated in JS — no files)
+        // ==========================================
+        let audioUnlocked = false;
+        let soundEnabled = true;
+        try { soundEnabled = (localStorage.getItem('soundEnabled') !== 'false'); } catch (e) {}
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            try { localStorage.setItem('soundEnabled', soundEnabled ? 'true' : 'false'); } catch (e) {}
+            updateSoundToggleUI();
+            if (!soundEnabled) { stopRingtone(); stopRingback(); } // silence anything currently playing
+        }
+        function updateSoundToggleUI() {
+            const btn = document.getElementById('sound-toggle');
+            if (btn) btn.innerHTML = soundEnabled ? '🔊 Sound On' : '🔕 Sound Off';
+        }
+
+        // Build a 16-bit mono WAV data URI from a list of notes {t,d,f,v}
+        function buildSound(notes, totalSec, sampleRate) {
+            sampleRate = sampleRate || 22050;
+            const samples = new Float32Array(Math.ceil(totalSec * sampleRate));
+            notes.forEach(n => {
+                const start = Math.floor(n.t * sampleRate);
+                const len = Math.floor(n.d * sampleRate);
+                const vol = (n.v != null) ? n.v : 0.25;
+                for (let i = 0; i < len; i++) {
+                    const t = i / sampleRate;
+                    const attack = Math.min(1, t / 0.008);
+                    const release = Math.min(1, (n.d - t) / 0.03);
+                    const env = attack * Math.max(0, release);
+                    const idx = start + i;
+                    if (idx >= 0 && idx < samples.length) samples[idx] += vol * env * Math.sin(2 * Math.PI * n.f * t);
+                }
+            });
+            const buffer = new ArrayBuffer(44 + samples.length * 2);
+            const view = new DataView(buffer);
+            const wr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+            wr(0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true); wr(8, 'WAVE');
+            wr(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+            view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+            wr(36, 'data'); view.setUint32(40, samples.length * 2, true);
+            let off = 44;
+            for (let i = 0; i < samples.length; i++) {
+                let s = Math.max(-1, Math.min(1, samples[i]));
+                view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                off += 2;
+            }
+            const bytes = new Uint8Array(buffer);
+            let bin = '';
+            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return 'data:audio/wav;base64,' + btoa(bin);
+        }
+
+        function initSounds() {
+            try {
+                // Cheerful ringtone melody that loops (~2.2s with a tail of silence)
+                const ring = buildSound([
+                    { t: 0.00, d: 0.20, f: 659.25, v: 0.28 },
+                    { t: 0.22, d: 0.20, f: 783.99, v: 0.28 },
+                    { t: 0.44, d: 0.28, f: 1046.50, v: 0.28 },
+                    { t: 0.74, d: 0.18, f: 783.99, v: 0.26 },
+                    { t: 0.94, d: 0.40, f: 1046.50, v: 0.28 }
+                ], 2.2);
+                // Single quick "message in" beep
+                const bin = buildSound([
+                    { t: 0.00, d: 0.13, f: 783.99, v: 0.30 }
+                ], 0.16);
+                // Single quick (softer/lower) "message out" beep
+                const bout = buildSound([
+                    { t: 0.00, d: 0.11, f: 523.25, v: 0.20 }
+                ], 0.14);
+                // Ringback heard while I'm calling out (classic dual-tone, 1s on / 1.5s off)
+                const back = buildSound([
+                    { t: 0.0, d: 1.0, f: 440, v: 0.16 },
+                    { t: 0.0, d: 1.0, f: 480, v: 0.12 }
+                ], 2.5);
+                const r = document.getElementById('ringtone'); if (r) r.src = ring;
+                const rb = document.getElementById('ringback'); if (rb) rb.src = back;
+                const ai = document.getElementById('beep-in'); if (ai) ai.src = bin;
+                const ao = document.getElementById('beep-out'); if (ao) ao.src = bout;
+            } catch (e) { console.warn('sound init failed', e); }
+        }
+
+        // Browsers need a user gesture before audio can play later. Unlock on first interaction.
+        function unlockAudioOnce() {
+            if (audioUnlocked) return;
+            audioUnlocked = true;
+            ['ringtone', 'ringback', 'beep-in', 'beep-out'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.muted = true;
+                const p = el.play();
+                if (p && p.then) p.then(() => { el.pause(); el.currentTime = 0; el.muted = false; }).catch(() => { el.muted = false; });
+                else { el.pause(); el.muted = false; }
+            });
+        }
+        ['click', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, unlockAudioOnce));
+
+        function startRingtone() { if (!soundEnabled) return; const r = document.getElementById('ringtone'); if (r) { try { r.currentTime = 0; } catch (e) {} r.play().catch(() => {}); } }
+        function stopRingtone() { const r = document.getElementById('ringtone'); if (r) { r.pause(); try { r.currentTime = 0; } catch (e) {} } }
+        function startRingback() { if (!soundEnabled) return; const r = document.getElementById('ringback'); if (r) { try { r.currentTime = 0; } catch (e) {} r.play().catch(() => {}); } }
+        function stopRingback() { const r = document.getElementById('ringback'); if (r) { r.pause(); try { r.currentTime = 0; } catch (e) {} } }
+        function playBeepIn() { if (!soundEnabled) return; const a = document.getElementById('beep-in'); if (a) { try { a.currentTime = 0; } catch (e) {} a.play().catch(() => {}); } }
+        function playBeepOut() { if (!soundEnabled) return; const a = document.getElementById('beep-out'); if (a) { try { a.currentTime = 0; } catch (e) {} a.play().catch(() => {}); } }
+
+        // ==========================================
+        // CALLING (WebRTC over Firebase signaling)
+        // ==========================================
+        // Listen for calls placed to me at calls/<myUid>.
+        function setupCallListener() {
+            if (!firebaseReady || !currentUser) return;
+            callListenerUid = currentUser.uid;
+            db.ref('calls/' + currentUser.uid).on('value', snap => handleCallNode(snap.val()));
+        }
+
+        function handleCallNode(data) {
+            if (!data) {
+                if (currentCall && currentCall.role === 'callee') endCallCleanup(false);
+                if (incomingCallData) { incomingCallData = null; hideIncomingCall(); }
+                return;
+            }
+            // Someone is ringing me and I'm idle -> show the incoming-call modal
+            if (data.status === 'ringing' && data.caller && data.caller !== currentUser.uid) {
+                if (!currentCall && (!incomingCallData || incomingCallData.callId !== data.callId)) {
+                    incomingCallData = data;
+                    showIncomingCall(data);
+                }
+            } else if (data.status === 'ended' || data.status === 'declined') {
+                // Caller hung up / it was handled before I picked up -> stop ringing
+                if (incomingCallData) { incomingCallData = null; hideIncomingCall(); }
+                if (currentCall && currentCall.role === 'callee') endCallCleanup(false);
+            }
+        }
+
+        function createPeer(nodeRef, myCandKey) {
+            pc = new RTCPeerConnection(ICE_SERVERS);
+            pendingRemoteCandidates = [];
+            // Buffer our own ICE candidates until AFTER we've written the offer/answer,
+            // otherwise the set()/update() write can clobber candidates written too early.
+            localCandQueue = [];
+            localCandReady = false;
+            localCandRef = nodeRef.child(myCandKey);
+            pc.onicecandidate = (e) => {
+                if (!e.candidate) return;
+                const c = e.candidate.toJSON();
+                if (localCandReady) localCandRef.push(c);
+                else localCandQueue.push(c);
+            };
+            pc.ontrack = (e) => {
+                remoteStream = e.streams[0];
+                const rv = document.getElementById('remote-video');
+                if (rv) {
+                    rv.srcObject = remoteStream;
+                    rv.muted = false;               // remote audio MUST play
+                    rv.play().catch(() => {});      // some browsers need an explicit play()
+                }
+                if (remoteStream.getVideoTracks().length > 0) {
+                    document.getElementById('call-audio-info').style.display = 'none';
+                }
+                // NOTE: do NOT say "Connected" here — tracks arrive before the media path opens.
+            };
+            // "Connected" is reported ONLY when the connection actually opens.
+            const markConnected = () => { stopRingback(); setCallStatus('Connected'); };
+            pc.onconnectionstatechange = () => {
+                if (!pc) return;
+                const st = pc.connectionState;
+                if (st === 'connected') markConnected();
+                else if (st === 'disconnected') setCallStatus('Reconnecting…'); // often recovers on its own
+                else if (st === 'failed') { setCallStatus('Connection failed'); endCallCleanup(true, 2500); }
+            };
+            pc.oniceconnectionstatechange = () => {
+                if (!pc) return;
+                const s = pc.iceConnectionState;
+                if (s === 'connected' || s === 'completed') markConnected();
+                else if (s === 'failed') { setCallStatus('Connection failed'); endCallCleanup(true, 2500); }
+            };
+        }
+
+        function flushLocalCandidates() {
+            localCandReady = true;
+            if (localCandRef) localCandQueue.forEach(c => localCandRef.push(c));
+            localCandQueue = [];
+        }
+
+        function onRemoteCandidate(snap) {
+            const cand = snap.val();
+            if (!cand) return;
+            if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+                pc.addIceCandidate(cand).catch(err => console.warn('addIceCandidate', err));
+            } else {
+                pendingRemoteCandidates.push(cand); // buffer until remote description is set
+            }
+        }
+        function flushCandidates() {
+            if (!pc) return;
+            pendingRemoteCandidates.forEach(c => pc.addIceCandidate(c).catch(() => {}));
+            pendingRemoteCandidates = [];
+        }
+
+        async function startCall(type) {
+            if (!firebaseReady || !currentChatData) return;
+            if (currentCall) { alert('You are already in a call.'); return; }
+            const calleeUid = currentChatData.uid;
+            const peerName = myNicknamesData[calleeUid] || currentChatData.username;
+            const audioC = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+            const constraints = (type === 'video') ? { audio: audioC, video: { facingMode: 'user' } } : { audio: audioC, video: false };
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            } catch (e) {
+                alert('Could not access ' + (type === 'video' ? 'camera/microphone' : 'microphone') + '. Calls need HTTPS and permission.');
+                return;
+            }
+
+            const callId = 'call_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+            const nodeRef = db.ref('calls/' + calleeUid);
+            currentCall = {
+                callId, role: 'caller', peerUid: calleeUid, peerName, type, nodeRef,
+                valueCb: callerNodeHandler, candRef: db.ref('calls/' + calleeUid + '/calleeCandidates'), candCb: onRemoteCandidate
+            };
+
+            createPeer(nodeRef, 'callerCandidates');
+            localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            await nodeRef.set({
+                callId, caller: currentUser.uid, callerName: (myUsername || 'Someone'),
+                callee: calleeUid, type, status: 'ringing',
+                offer: { type: offer.type, sdp: offer.sdp }
+            });
+            flushLocalCandidates(); // now safe to send our ICE candidates
+            nodeRef.onDisconnect().remove(); // clear the ring if I drop offline
+
+            showCallOverlay(type, 'Calling ' + peerName + '…');
+            startRingback();
+            nodeRef.on('value', callerNodeHandler);
+            currentCall.candRef.on('child_added', onRemoteCandidate);
+        }
+
+        async function callerNodeHandler(snap) {
+            const data = snap.val();
+            if (!data) { endCallCleanup(false); return; }
+            if (data.status === 'declined') { setCallStatus('Call declined'); endCallCleanup(true, 1000); return; }
+            if (data.status === 'ended') { endCallCleanup(false); return; }
+            if (data.answer && pc && pc.signalingState === 'have-local-offer') {
+                try {
+                    await pc.setRemoteDescription(data.answer);
+                    stopRingback();
+                    setCallStatus('Connecting…'); // they picked up; wait for the media path to open
+                    flushCandidates();
+                    // They answered: a brief Firebase blip should no longer kill the call
+                    try { currentCall && currentCall.nodeRef.onDisconnect().cancel(); } catch (e) {}
+                } catch (e) { console.warn('set answer failed', e); }
+            }
+        }
+
+        async function acceptCall() {
+            const data = incomingCallData;
+            hideIncomingCall();
+            if (!data) return;
+            const type = data.type || 'audio';
+            const audioC = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+            const constraints = (type === 'video') ? { audio: audioC, video: { facingMode: 'user' } } : { audio: audioC, video: false };
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            } catch (e) {
+                alert('Could not access ' + (type === 'video' ? 'camera/microphone' : 'microphone') + '.');
+                db.ref('calls/' + currentUser.uid).update({ status: 'declined' });
+                incomingCallData = null;
+                return;
+            }
+
+            const nodeRef = db.ref('calls/' + currentUser.uid); // my own node
+            const callerName = (myNicknamesData && myNicknamesData[data.caller]) || data.callerName || 'Caller';
+            currentCall = {
+                callId: data.callId, role: 'callee', peerUid: data.caller, peerName: callerName, type, nodeRef,
+                valueCb: null, candRef: db.ref('calls/' + currentUser.uid + '/callerCandidates'), candCb: onRemoteCandidate
+            };
+
+            createPeer(nodeRef, 'calleeCandidates');
+            localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+            await pc.setRemoteDescription(data.offer);
+            flushCandidates(); // apply any caller candidates already buffered
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            await nodeRef.update({ answer: { type: answer.type, sdp: answer.sdp }, status: 'accepted' });
+            flushLocalCandidates(); // now safe to send our ICE candidates
+
+            showCallOverlay(type, 'Connecting…');
+            currentCall.candRef.on('child_added', onRemoteCandidate); // replays caller's queued candidates
+            incomingCallData = null;
+        }
+
+        function declineCall() {
+            const data = incomingCallData;
+            hideIncomingCall();
+            incomingCallData = null;
+            if (!data) return;
+            const ref = db.ref('calls/' + currentUser.uid);
+            ref.update({ status: 'declined' });
+            setTimeout(() => ref.remove(), 1500);
+        }
+
+        function hangUp() {
+            if (!currentCall) { endCallCleanup(false); return; }
+            const nodeRef = currentCall.nodeRef;
+            nodeRef.update({ status: 'ended' }).catch(() => {});
+            setTimeout(() => nodeRef.remove().catch(() => {}), 1000);
+            endCallCleanup(false);
+        }
+
+        function endCallCleanup(graceful, delay) {
+            const finish = () => {
+                stopRingtone(); stopRingback();
+                if (pc) { try { pc.onicecandidate = null; pc.ontrack = null; pc.close(); } catch (e) {} pc = null; }
+                if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+                remoteStream = null;
+                if (currentCall) {
+                    // detach ONLY this call's listeners (never the global incoming listener)
+                    if (currentCall.role === 'caller' && currentCall.nodeRef && currentCall.valueCb) {
+                        currentCall.nodeRef.off('value', currentCall.valueCb);
+                        try { currentCall.nodeRef.onDisconnect().cancel(); } catch (e) {}
+                    }
+                    if (currentCall.candRef && currentCall.candCb) currentCall.candRef.off('child_added', currentCall.candCb);
+                }
+                pendingRemoteCandidates = [];
+                currentCall = null;
+                const rv = document.getElementById('remote-video'); if (rv) rv.srcObject = null;
+                const lv = document.getElementById('local-video'); if (lv) lv.srcObject = null;
+                hideCallOverlay();
+            };
+            if (graceful && delay) setTimeout(finish, delay); else finish();
+        }
+
+        // ---- Call UI helpers ----
+        function showCallOverlay(type, statusText) {
+            document.getElementById('call-overlay').classList.remove('hidden');
+            setCallStatus(statusText || '');
+            const isVideo = (type === 'video');
+            const lv = document.getElementById('local-video');
+            const rv = document.getElementById('remote-video');
+            if (localStream && lv) { lv.srcObject = localStream; lv.play().catch(() => {}); }
+            if (rv) rv.play().catch(() => {});
+            lv.style.display = isVideo ? 'block' : 'none';
+            document.getElementById('call-audio-info').style.display = isVideo ? 'none' : 'flex';
+            document.getElementById('cam-toggle-btn').style.display = isVideo ? 'flex' : 'none';
+            const peerName = currentCall ? currentCall.peerName : '';
+            document.getElementById('call-peer-name').innerText = peerName || '';
+            document.getElementById('call-peer-initial').innerText = (peerName || '?').charAt(0).toUpperCase();
+        }
+        function setCallStatus(t) { const el = document.getElementById('call-status-text'); if (el) el.innerText = t; }
+        function hideCallOverlay() {
+            document.getElementById('call-overlay').classList.add('hidden');
+            const mb = document.getElementById('mute-btn'); if (mb) { mb.classList.remove('off'); mb.innerText = '🎤'; }
+            const cb = document.getElementById('cam-toggle-btn'); if (cb) { cb.classList.remove('off'); cb.innerText = '📹'; }
+        }
+        function showIncomingCall(data) {
+            // Prefer the nickname I set for this caller; fall back to their username.
+            const name = (myNicknamesData && myNicknamesData[data.caller]) || data.callerName || 'Someone';
+            document.getElementById('incoming-call-text').innerText = name + ' is calling';
+            document.getElementById('incoming-call-sub').innerText = (data.type === 'video' ? 'Video call' : 'Voice call');
+            document.getElementById('incoming-call').classList.remove('hidden');
+            startRingtone();
+        }
+        function hideIncomingCall() { document.getElementById('incoming-call').classList.add('hidden'); stopRingtone(); }
+
+        function toggleMute() {
+            if (!localStream) return;
+            const track = localStream.getAudioTracks()[0];
+            if (!track) return;
+            track.enabled = !track.enabled;
+            const btn = document.getElementById('mute-btn');
+            btn.innerText = track.enabled ? '🎤' : '🔇';
+            btn.classList.toggle('off', !track.enabled);
+        }
+        function toggleCam() {
+            if (!localStream) return;
+            const track = localStream.getVideoTracks()[0];
+            if (!track) return;
+            track.enabled = !track.enabled;
+            const btn = document.getElementById('cam-toggle-btn');
+            btn.innerText = track.enabled ? '📹' : '🚫';
+            btn.classList.toggle('off', !track.enabled);
+        }
+
+        window.addEventListener('beforeunload', function (e) {
+            e.preventDefault(); e.returnValue = '';
+        });
+    </script>
+</body>
+</html>
