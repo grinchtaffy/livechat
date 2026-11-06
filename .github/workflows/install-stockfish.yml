@@ -1,0 +1,31 @@
+
+name: Install Stockfish 19 Lite Chess Engine
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install-stockfish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Stockfish
+        run: |
+          mkdir -p engines
+          BASE="https://github.com/nmrugg/stockfish.js/releases/download/v19.0.1"
+          curl -fL "$BASE/stockfish-19-lite-single.js" -o engines/stockfish-19-lite-single.js
+          curl -fL "$BASE/stockfish-19-lite-single.wasm" -o engines/stockfish-19-lite-single.wasm
+          test -s engines/stockfish-19-lite-single.js
+          test -s engines/stockfish-19-lite-single.wasm
+      - name: Save engine files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add engines/
+          if ! git diff --cached --quiet; then
+            git commit -m "Install Stockfish chess engine"
+            git push
+          fi
