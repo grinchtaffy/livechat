@@ -9730,6 +9730,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             // Clear linked Google data from this view without disconnecting the admin's own account.
             ytOAuthToken='';ytOAuthExpiresAt=0;ytOAuthOwnerUid=null;ytOAuthTokenClient=null;
             ytLinkedChannel=null;ytCloudProfile=null;ytCloudProfileLoadedFor=null;
+            if(document.getElementById('gp-title')?.textContent==='Tuff Client'&&document.getElementById('game-player')?.classList.contains('show'))window.closeGame?.(true);
             impersonating = true;
             loginAsDismissedUnread = new Set();
             impersonationTargetUid = uid;
@@ -16184,7 +16185,14 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         #game-player .gp-bar { height: 46px; background: #161923; border-bottom: 1px solid #262b3d; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; color: #e6e8f0; }
         #game-player .gp-bar button { width: auto; background: #1c2030; border: 1px solid #262b3d; color: #e6e8f0; border-radius: 8px; padding: 6px 12px; cursor: pointer; margin-left: 8px; }
         #game-player .gp-bar button:hover { border-color: #6c5ce7; }
-        #gp-focus-game[hidden] { display:none!important; }
+        #gp-focus-game[hidden], #gp-tuff-backup[hidden], .tuff-backup-panel[hidden] { display:none!important; }
+        #game-player .gp-bar { min-height:46px;height:auto;flex-wrap:wrap;gap:6px;padding-block:5px; }
+        .tuff-focus-hint { padding:8px 12px;color:#f9e4ab;background:#332b19;text-align:center;font:600 13px/1.45 system-ui;flex:none; }
+        .tuff-backup-panel { position:absolute;z-index:4;top:12px;right:12px;left:auto;width:min(440px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;box-sizing:border-box;background:#1c2030;border:1px solid #515b78;border-radius:12px;padding:16px;color:#edf0ff;font:14px/1.5 system-ui;box-shadow:0 12px 36px #0009; }
+        .tuff-backup-panel button { width:auto;padding:7px 11px;border:1px solid #515b78;border-radius:8px;background:#303850;color:#fff;cursor:pointer; }
+        .tuff-backup-panel button:disabled { opacity:.5;cursor:not-allowed; }
+        .tuff-backup-panel input { width:100%;max-width:100%;box-sizing:border-box; }
+
         #game-stage { flex: 1; min-height: 0; display: grid; place-items: center; overflow: auto; background: #0e1016; }
         #game-stage iframe { width: 100%; height: 100%; border: none; }
     </style>
@@ -16222,7 +16230,8 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         <div class="gp-bar">
             <span id="gp-title" style="font-weight:600;"></span>
             <div>
-                <button id="gp-focus-game" type="button" hidden title="Return keyboard focus to the game">⌨ Focus game</button>
+                <button id="gp-focus-game" type="button" hidden title="Press before typing in Tuff Client">⌨ Focus game</button>
+                <button id="gp-tuff-backup" type="button" hidden>☁ Save backup</button>
                 <button onclick="gameFullscreen()">⛶ Fullscreen</button>
                 <button onclick="closeGame()">✕ Close</button>
             </div>
@@ -16600,16 +16609,59 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             return () => {disposed=true;screen.src='about:blank';container.remove();};
         }});
 
+        // Account-scoped manual export backup. The sandboxed client has no access to this data.
+        function attachTuffBackup(viewport,isDisposed){
+            const toggle=document.getElementById('gp-tuff-backup');
+            const initialUid=auth?.currentUser?.uid;
+            const MAX=4*1024*1024;
+            const currentAccount=()=>!isDisposed()&&!!initialUid&&auth?.currentUser?.uid===initialUid&&currentUser?.uid===initialUid&&!impersonating;
+            const panel=document.createElement('section');panel.className='tuff-backup-panel';panel.hidden=true;panel.setAttribute('aria-label','Tuff Client account backup');
+            const header=document.createElement('div');header.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px';
+            const title=document.createElement('strong');title.textContent='Tuff Client · Account backup';
+            const button=(text)=>{const b=document.createElement('button');b.type='button';b.textContent=text;return b;};
+            const close=button('Close');header.append(title,close);
+            const intro=document.createElement('p');intro.textContent='Manual backup only. Export your world or settings from Tuff Client if it supports export, then upload that file here. Download it on another device and use the game’s own import option. Multiplayer progress is controlled by the game server.';
+            const note=document.createElement('p');note.style.color='#f9e4ab';note.textContent='One file, up to 4 MiB. Saving replaces the previous backup. Do not upload passwords, session tokens or account credentials. Stored in Firebase under your own LiveChat account, not end-to-end encrypted.';
+            const input=document.createElement('input');input.type='file';input.setAttribute('aria-label','Choose an exported game save or settings file');
+            const actions=document.createElement('div');actions.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin:10px 0';
+            const save=button('Save to my account'),download=button('Download backup'),remove=button('Delete backup'),refresh=button('Refresh');actions.append(save,download,remove,refresh);
+            const state=document.createElement('div');state.setAttribute('role','status');state.style.overflowWrap='anywhere';state.textContent='Open to check your backup.';
+            panel.append(header,intro,note,input,actions,state);viewport.appendChild(panel);
+            let busy=false,record=null,loaded=false,stopAuth=null;
+            const ref=()=>db.ref('tuffClientBackups/'+initialUid);
+            function sync(){const allowed=currentAccount()&&!busy;input.disabled=!allowed;save.disabled=!allowed||!loaded||!input.files?.length;download.disabled=!allowed||!loaded||!record;remove.disabled=!allowed||!loaded||!record;refresh.disabled=!allowed;}
+            const check=()=>{if(!currentAccount())throw Error('Sign in to your own LiveChat account.');};
+            function validRecord(v){return v&&typeof v.name==='string'&&Number.isInteger(v.bytes)&&v.bytes>0&&v.bytes<=MAX&&typeof v.base64==='string'&&v.base64.length===4*Math.ceil(v.bytes/3)&&typeof v.savedAt==='number';}
+            function showRecord(){state.textContent=record?`Saved: ${record.name} (${Math.ceil(record.bytes/1024)} KiB) · ${new Date(record.savedAt).toLocaleString()}`:'No backup saved yet.';}
+            async function run(fn){if(busy||!currentAccount())return;busy=true;sync();try{await fn();}catch(e){if(currentAccount())state.textContent='Backup error: '+(e?.message||'Could not complete request.');}finally{busy=false;sync();}}
+            async function read(){check();loaded=false;record=null;const snap=await ref().once('value');check();const v=snap.val();if(v!==null&&!validRecord(v))throw Error('The saved backup format is invalid.');record=v||null;loaded=true;showRecord();}
+            function bytesToBase64(bytes){let raw='';for(let i=0;i<bytes.length;i+=8192)raw+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(raw);}
+            function safeName(name){return String(name||'tuff-save.bin').replace(/[\x00-\x1f\x7f/\\]/g,'_').slice(0,180)||'tuff-save.bin';}
+            input.addEventListener('change',sync);
+            save.onclick=()=>run(async()=>{check();const file=input.files?.[0];if(!file)return;if(!file.size||file.size>MAX)throw Error('Choose a non-empty file no larger than 4 MiB.');if(!confirm('Upload this exported file to your own Firebase backup? This replaces any previous backup.'))return;state.textContent='Saving backup…';const bytes=new Uint8Array(await file.arrayBuffer());check();const data={name:safeName(file.name),bytes:bytes.length,base64:bytesToBase64(bytes),savedAt:firebase.database.ServerValue.TIMESTAMP};await ref().set(data);check();input.value='';await read();});
+            download.onclick=()=>run(async()=>{check();await read();check();if(!record)throw Error('No backup available.');const raw=atob(record.base64);if(raw.length!==record.bytes)throw Error('Backup data is incomplete.');const bytes=Uint8Array.from(raw,c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([bytes],{type:'application/octet-stream'}));const a=document.createElement('a');a.href=url;a.download=safeName(record.name);document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);});
+            remove.onclick=()=>run(async()=>{check();if(!confirm('Permanently delete the backup from your account?'))return;await ref().remove();check();await read();});
+            refresh.onclick=()=>run(read);
+            const hide=()=>{panel.hidden=true;};close.onclick=hide;
+            const open=()=>{if(!currentAccount()){hide();showToast('Sign in to your own account to use game backups.');return;}panel.hidden=!panel.hidden;if(!panel.hidden)run(read);};
+            if(toggle){toggle.hidden=!currentAccount();toggle.addEventListener('click',open);}
+            if(auth&&typeof auth.onAuthStateChanged==='function')stopAuth=auth.onAuthStateChanged(()=>{if(!currentAccount()){record=null;input.value='';hide();if(toggle)toggle.hidden=true;sync();}});
+            sync();
+            return ()=>{if(stopAuth)stopAuth();record=null;input.value='';if(toggle){toggle.removeEventListener('click',open);toggle.hidden=true;}panel.remove();};
+        }
+
         // Tuff Client: local game files, loaded only after the game card is clicked.
         // Keep the sandbox opaque: same-origin games must not access LiveChat storage or DOM.
         GAMES.push({ title: 'Tuff Client', icon: '⛏️', init: function(stage) {
             const url = new URL('./tuff-client/index.html', window.location.href).href;
             const shell = document.createElement('div');
-            shell.style.cssText='position:relative;width:100%;height:100%;min-height:0;min-width:0;overflow:hidden;background:#10121a';
+            shell.style.cssText='position:relative;display:flex;flex-direction:column;width:100%;height:100%;min-height:0;min-width:0;overflow:hidden;background:#10121a';
+            const hint=document.createElement('div');hint.className='tuff-focus-hint';hint.textContent='Keyboard won’t work until you press ⌨ Focus game. Click it first, then click the in-game text field. If typing stops, press Focus game again.';
+            const viewport=document.createElement('div');viewport.style.cssText='position:relative;flex:1;min-height:0;overflow:hidden';
             const frame = document.createElement('iframe');
             frame.title='Tuff Client';
             frame.tabIndex=0;
-            frame.setAttribute('aria-label','Tuff Client game — click inside to type or play');
+            frame.setAttribute('aria-label','Tuff Client game — press Focus game before typing or playing');
             frame.style.cssText='display:block;width:100%;height:100%;border:0;background:#10121a';
             frame.setAttribute('sandbox','allow-scripts allow-pointer-lock allow-downloads');
             frame.setAttribute('allow','fullscreen; autoplay; gamepad; camera \'none\'; microphone \'none\'; geolocation \'none\'; clipboard-read \'none\'; clipboard-write \'none\'');
@@ -16619,7 +16671,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             status.setAttribute('role','status');
             status.style.cssText='position:absolute;inset:0;display:grid;place-content:center;text-align:center;gap:10px;padding:24px;color:#e6e8f0;background:#10121a;font:14px system-ui;pointer-events:none';
             const heading=document.createElement('strong'); heading.style.fontSize='22px';heading.textContent='⛏️ Loading Tuff Client…';
-            const detail=document.createElement('span'); detail.textContent='The first load may take a little longer while the game downloads.';
+            const detail=document.createElement('span'); detail.textContent='The first load may take a little longer. Press Focus game once it finishes loading to use your keyboard.';
             status.append(heading,detail);
             let disposed=false, missing=false;
             const aborter=new AbortController();
@@ -16635,27 +16687,21 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 if(disposed||missing)return;
                 ready=true;status.remove();
                 if(focusButton)focusButton.disabled=false;
-                // Do not steal focus from a different modal or browser tab.
-                const active=document.activeElement;
-                if(document.hasFocus()&&(active===document.body||active===document.documentElement||player?.contains(active)||document.getElementById('games-modal')?.contains(active)))focusGame();
-            }
-            function fullscreenChanged(){
-                if(document.fullscreenElement===player)focusGame();
+                // Require a deliberate click on Focus game; do not steal keyboard focus on load.
             }
             if(focusButton){focusButton.hidden=false;focusButton.disabled=true;focusButton.addEventListener('click',focusGame);}
-            document.addEventListener('fullscreenchange',fullscreenChanged);
-            function unavailable(){if(disposed)return;missing=true;if(focusButton)focusButton.disabled=true;heading.textContent='Tuff Client is not installed yet';detail.textContent='Add the game file at tuff-client/index.html in the LiveChat repository, then reopen the game.';if(!status.isConnected)shell.appendChild(status);}
+            function unavailable(){if(disposed)return;missing=true;if(focusButton)focusButton.disabled=true;heading.textContent='Tuff Client is not installed yet';detail.textContent='Add the game file at tuff-client/index.html in the LiveChat repository, then reopen the game.';if(!status.isConnected)viewport.appendChild(status);}
             frame.addEventListener('load',loaded);
             // No preloading, background download, or extra game-sized fetch.
             frame.src=url;
-            shell.append(frame,status);stage.appendChild(shell);
+            viewport.append(frame,status);shell.append(hint,viewport);stage.appendChild(shell);
+            const cleanupBackup=attachTuffBackup(viewport,()=>disposed);
             // A lightweight HEAD check can distinguish a missing deployment from loading.
             // Do not block the game on this optional check or fall back to an unsafe iframe.
             fetch(url,{method:'HEAD',cache:'no-store',signal:aborter.signal,credentials:'omit'})
                 .then(r=>{if(r.status===404||r.status===410)unavailable();}).catch(()=>{});
             return ()=>{
-                disposed=true;aborter.abort();frame.removeEventListener('load',loaded);
-                document.removeEventListener('fullscreenchange',fullscreenChanged);
+                disposed=true;cleanupBackup();aborter.abort();frame.removeEventListener('load',loaded);
                 if(focusButton){focusButton.removeEventListener('click',focusGame);focusButton.hidden=true;focusButton.disabled=false;}
                 frame.remove();shell.remove();
             };
@@ -17474,6 +17520,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
     const _youtubeQuotaStopPatched=youtubeQuotaStop; youtubeQuotaStop=function(){_youtubeQuotaStopPatched();updateYouTubeRequestToggle();};
 
     function resetAccountScopedTransientUi(){
+        if(document.getElementById('gp-title')?.textContent==='Tuff Client'&&document.getElementById('game-player')?.classList.contains('show'))window.closeGame?.(true);
         try{ if(ytSearchAbort)ytSearchAbort.abort(); }catch(e){}
         ytOAuthToken='';ytOAuthExpiresAt=0;ytOAuthOwnerUid=null;ytOAuthTokenClient=null;ytLinkedChannel=null;ytRecommendationCache=[];ytShortsCache=[];ytCloudProfile=null;ytCloudProfileLoadedFor=null;currentFullscreenVideo=null;
         ['yt-search-input','yt-api-key-input','yt-oauth-client-input','yt-key-share-code','yt-key-redeem-code','sidebar-search','admin-search','admin-global-server-search'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
