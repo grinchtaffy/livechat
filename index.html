@@ -2135,7 +2135,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
 #game-player.lc-tuff-mini #gp-tuff-backup,#game-player.lc-tuff-mini button[onclick="closeGame()"]{display:none}
 #game-player.lc-tuff-mini .gp-bar>div{display:flex;flex-wrap:wrap}
 #gp-tuff-restore[hidden],#gp-tuff-stop[hidden]{display:none!important}
-</style></head>
+</style><style>#profile-modal .choice-card{max-height:90vh;overflow-y:auto}#lc-avatar-history-grid .preset-avatar{min-height:42px}#lc-avatar-history-clear[hidden]{display:none!important}.tuff-focus-hint button{color:inherit;background:transparent;border:1px solid currentColor;border-radius:5px}</style></head>
 <body>
     <script>
     
@@ -2284,6 +2284,10 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             <p style="margin:6px 0 10px; font-size:13px; color:#7f8c8d;" id="profile-name-label"></p>
             <p style="margin:0 0 8px; font-size:13px; font-weight:700; color:#2c3e50; text-align:left;">Pick an avatar</p>
             <div id="preset-avatar-grid" class="preset-grid"></div>
+            <div style="text-align:left;margin:12px 0 8px"><strong>Previous profile pictures</strong><div style="font-size:11px;opacity:.8">Your last 6 pictures, saved privately to your account.</div></div>
+            <div id="lc-avatar-history-grid" class="preset-grid"></div>
+            <p id="lc-avatar-history-note" style="font-size:12px" role="status"></p>
+            <button class="cancel" id="lc-avatar-history-clear" onclick="lcClearAvatarHistory()">Clear previous pictures</button>
             <input type="file" id="avatar-file-input" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" onchange="onAvatarPicked(event)">
             <button onclick="document.getElementById('avatar-file-input').click()">📷 Upload your own</button>
             <button class="cancel" id="remove-avatar-btn" onclick="removeAvatar()">Use username initial</button>
@@ -4678,17 +4682,41 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             document.querySelectorAll('#profile-modal button,#profile-modal input').forEach(e=>e.disabled=value);
             document.getElementById('preset-avatar-grid').inert=value;
         }
+        const LC_AVATAR_HISTORY_MAX=6;
+        function lcHistoryAvatarValid(uri){return typeof uri==='string'&&uri.length<=1450000&&(PRESET_AVATARS.includes(uri)||/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(uri));}
+        function lcHistoryCropValid(c){return c&&typeof c==='object'&&['w','h','x','y'].every(k=>typeof c[k]==='number'&&Number.isFinite(c[k]))&&c.w>=100&&c.w<=6000&&c.h>=100&&c.h<=6000&&c.x>=0&&c.x<=100&&c.y>=0&&c.y<=100?{w:c.w,h:c.h,x:c.x,y:c.y}:null;}
+        function lcHistoryRows(v){return Object.values(v||{}).filter(r=>r&&lcHistoryAvatarValid(r.uri)).sort((a,b)=>Number(b.at||0)-Number(a.at||0)).slice(0,LC_AVATAR_HISTORY_MAX);}
+        function lcHistoryMap(rows){return Object.fromEntries(rows.slice(0,LC_AVATAR_HISTORY_MAX).map((r,i)=>[String(i),{uri:r.uri,at:Number(r.at)||Date.now(),...(lcHistoryCropValid(r.crop)?{crop:lcHistoryCropValid(r.crop)}:{})}]));}
+        let lcAvatarHistoryRender=0;
+        async function lcRenderAvatarHistory(uid){
+            const grid=document.getElementById('lc-avatar-history-grid'),note=document.getElementById('lc-avatar-history-note'),clear=document.getElementById('lc-avatar-history-clear'),seq=++lcAvatarHistoryRender;
+            grid.replaceChildren();clear.hidden=true;note.textContent='Loading previous pictures…';
+            try{const snap=await db.ref('users/'+uid+'/avatarHistory').once('value');if(!lcAvatarOwner(uid)||seq!==lcAvatarHistoryRender)return;
+                const rows=lcHistoryRows(snap.val());clear.hidden=!rows.length;
+                note.textContent=rows.length?'Choose a previous picture to use it again.':'No previous pictures yet. Change your picture to start your history.';
+                for(const r of rows){const b=document.createElement('button');b.type='button';b.className='preset-avatar'+(userAvatarCache[uid]===r.uri?' selected':'');b.style.backgroundImage='url('+JSON.stringify(r.uri)+')';window.lcProfileMedia?.paintCover(b,lcHistoryCropValid(r.crop));b.title='Use previous profile picture';b.setAttribute('aria-label',b.title);b.disabled=lcAvatarSaving;b.onclick=async()=>{if(!lcAvatarOwner(uid)||lcAvatarSaving)return;lcAvatarBusy(true);try{await lcSaveAvatar(uid,r.uri,lcHistoryCropValid(r.crop));}catch(e){lcAvatarStatus('Could not restore: '+e.message);}finally{lcAvatarBusy(false);}};grid.append(b);}
+            }catch(e){if(lcAvatarOwner(uid)&&seq===lcAvatarHistoryRender)note.textContent='Previous pictures could not be loaded. Check the updated database rules.';}
+        }
+        async function lcClearAvatarHistory(){const uid=currentUser?.uid;if(!lcAvatarOwner(uid)||lcAvatarSaving||!confirm('Clear your previous profile pictures? Your current picture will stay.'))return;lcAvatarBusy(true);try{await db.ref('users/'+uid+'/avatarHistory').remove();if(lcAvatarOwner(uid))await lcRenderAvatarHistory(uid);}catch(e){lcAvatarStatus('Could not clear history: '+e.message);}finally{lcAvatarBusy(false);}}
         async function lcSaveAvatar(uid,uri,crop) {
             if(!lcAvatarOwner(uid)) throw Error('Sign in to your own account to change your picture.');
             // Atomically clear stale crop metadata when switching to an initial or preset.
-            await db.ref().update({['users/'+uid+'/avatar']:uri||null,['userProfiles/'+uid+'/avatarCrop']:crop||null});
+            const userPath='users/'+uid,profilePath='userProfiles/'+uid;
+            const [oldSnap,cropSnap,historySnap]=await Promise.all([db.ref(userPath+'/avatar').once('value'),db.ref(profilePath+'/avatarCrop').once('value'),db.ref(userPath+'/avatarHistory').once('value')]);
+            if(!lcAvatarOwner(uid))throw Error('Account changed.');
+            const old=oldSnap.val(),oldCrop=lcHistoryCropValid(cropSnap.val());
+            let rows=lcHistoryRows(historySnap.val());
+            if(lcHistoryAvatarValid(old)&&old!==uri)rows=[{uri:old,crop:oldCrop,at:Date.now()},...rows.filter(r=>r.uri!==old)];
+            // The current picture does not need a second copy in the archive.
+            rows=rows.filter(r=>r.uri!==uri).slice(0,LC_AVATAR_HISTORY_MAX);
+            await db.ref().update({[userPath+'/avatar']:uri||null,[profilePath+'/avatarCrop']:crop||null,[userPath+'/avatarHistory']:rows.length?lcHistoryMap(rows):null});
             if(!lcAvatarOwner(uid))return;
             userAvatarCache[uid]=uri||null;
             repaintAvatarsFor(uid);renderFriendsList();refreshNamesEverywhere();refreshMyAvatarUI();
             paintAvatar(document.getElementById('profile-avatar-preview'),uid,myUsername);
             window.lcProfileMedia?.paintCover(document.getElementById('profile-avatar-preview'),crop);
             document.getElementById('remove-avatar-btn').style.display=uri?'block':'none';
-            renderPresetGrid();lcAvatarStatus(uri?'Profile picture saved.':'Username initial restored.');
+            renderPresetGrid();lcAvatarStatus(uri?'Profile picture saved.':'Username initial restored.');if(!document.getElementById('profile-modal').classList.contains('hidden'))await lcRenderAvatarHistory(uid);
         }
         async function selectPresetAvatar(uri) {
             if(lcAvatarSaving||!PRESET_AVATARS.includes(uri)||!lcAvatarOwner(currentUser?.uid))return;
@@ -4703,7 +4731,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             const uid=currentUser.uid;
             db.ref('userProfiles/'+uid+'/avatarCrop').once('value').then(s=>{if(lcAvatarOwner(uid)&&!lcAvatarSaving)window.lcProfileMedia?.paintCover(prev,s.val())}).catch(()=>{});
             renderPresetGrid();document.getElementById('remove-avatar-btn').style.display=userAvatarCache[uid]?'block':'none';
-            lcAvatarStatus('');document.getElementById('profile-modal').classList.remove('hidden');
+            lcAvatarStatus('');document.getElementById('profile-modal').classList.remove('hidden');lcRenderAvatarHistory(uid);
         }
         function openProfileModal(){lcOpenAvatarPicker()}
         function closeProfileModal(){if(!lcAvatarSaving)document.getElementById('profile-modal').classList.add('hidden')}
@@ -11754,6 +11782,22 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         let ytOAuthTokenClient = null;
         let ytLinkedChannel = null;
         let ytRecommendationCache = [];
+        let lcYTRecPool=[],lcYTRecPoolUid='',lcYTRecPoolAt=0,lcYTRecLoading=0,lcYTRecSeq=0;
+        const LC_YT_SEEN_KEY='chatapp.youtubeFeedSeen.v1';
+        function lcYTFeedRotate(pool){
+            const history=new Set(getEffectiveYouTubeHistory().map(v=>v.id));
+            let seen=[];try{const a=JSON.parse(ytLocalGet(LC_YT_SEEN_KEY)||'[]');if(Array.isArray(a))seen=a.filter(x=>typeof x==='string').slice(0,180);}catch(e){}
+            const pos=new Map(seen.map((id,i)=>[id,i]));
+            const candidates=[...new Map(pool.filter(v=>v&&v.id).map(v=>[v.id,v])).values()];
+            // Unwatched and unseen first; when exhausted, least recently displayed first.
+            const ordered=candidates.map(v=>({v,tie:Math.random()})).sort((a,b)=>Number(history.has(a.v.id))-Number(history.has(b.v.id)) || Number(pos.has(a.v.id))-Number(pos.has(b.v.id)) || ((pos.get(b.v.id)??0)-(pos.get(a.v.id)??0)) || a.tie-b.tie).map(x=>x.v);
+            // Interleave channels so a single creator doesn't dominate the first screen.
+            const batch=[],rest=ordered.slice(),counts=new Map();
+            while(rest.length&&batch.length<18){let i=rest.findIndex(v=>(counts.get(v.channelId||v.channel)||0)<2);if(i<0)i=0;const [v]=rest.splice(i,1);batch.push(v);const key=v.channelId||v.channel;counts.set(key,(counts.get(key)||0)+1);}
+            ytLocalSet(LC_YT_SEEN_KEY,JSON.stringify([...new Set([...batch.map(v=>v.id),...seen])].slice(0,180)));return batch;
+        }
+        async function lcYTPopularFeed(){const pop=await ytApi('videos',{part:'snippet,contentDetails,statistics',chart:'mostPopular',maxResults:'35',regionCode:'US'},false);return (pop.items||[]).map(v=>{const sn=v.snippet||{},sec=parseIsoDurationSeconds(v.contentDetails?.duration);return {id:v.id,title:decodeYouTubeText(sn.title||''),channel:decodeYouTubeText(sn.channelTitle||''),channelId:sn.channelId||'',thumb:ytThumb(sn,v.id),durationSec:sec,publishedAt:sn.publishedAt||'',isShort:sec>0&&sec<=180,stats:v.statistics||{}}});}
+
         let ytShortsCache = [];
         let ytShortObserver = null;
         let ytCloudProfile = null;
@@ -11812,9 +11856,11 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             if(impersonating)return null;
             if (!currentUser || !db) return null;
             if (!force && ytCloudProfileLoadedFor === currentUser.uid) return ytCloudProfile;
+            const profileOwner=currentUser.uid;
             try {
-                const snap = await db.ref('users/' + currentUser.uid + '/youtubeProfile').once('value');
-                ytCloudProfile = snap.val() || {};
+                const snap = await db.ref('users/' + profileOwner + '/youtubeProfile').once('value');
+                if(currentUser?.uid!==profileOwner||auth.currentUser?.uid!==profileOwner||impersonating)throw Error('Account changed.');
+                ytCloudProfile = snap.val() || {};ytCloudProfileLoadedFor=profileOwner;
                 // Mirror synced public configuration into this browser so every later YouTube
                 // request uses the same key/client ID immediately, including on slower devices.
                 // Skip this if a shared key is actively selected on this device — otherwise a
@@ -11826,10 +11872,11 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 hydrateYouTubeSettingsInputs();
             } catch (e) {
                 console.warn('YouTube profile sync read failed', e);
-                ytCloudProfile = ytCloudProfile || {};
+                if(currentUser?.uid===profileOwner)ytCloudProfile = ytCloudProfile || {};
                 throw e;
             } finally {
-                ytCloudProfileLoadedFor = currentUser.uid;
+                // Only a successfully loaded profile should be cached.
+                if(currentUser?.uid===profileOwner&&auth.currentUser?.uid===profileOwner&&!impersonating&&ytCloudProfileLoadedFor!==profileOwner)ytCloudProfileLoadedFor=null;
             }
             return ytCloudProfile;
         }
@@ -12546,7 +12593,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             try{ytLocalRemove(YT_WATCH_HISTORY_KEY);ytLocalRemove(YT_RESUME_KEY);}catch(e){}
             const ref=ytProfileRef(); if(ref) { ref.child('history').remove().catch(()=>{}); ref.child('resume').remove().catch(()=>{}); }
             if(ytCloudProfile) { ytCloudProfile.history={}; ytCloudProfile.resume={}; }
-            ytRecommendationCache=[]; ytShortsCache=[];
+            ytRecommendationCache=[]; ytShortsCache=[];lcYTRecPool=[];lcYTRecPoolUid='';lcYTRecPoolAt=0;lcYTRecSeq++;lcYTRecLoading=0;ytLocalRemove(LC_YT_SEEN_KEY);
             const s=document.getElementById('yt-rec-status'); if(s) s.textContent='Synced YouTube watch history and saved playback positions cleared.';
             const b=document.getElementById('yt-recommendation-results'); if(b) b.innerHTML='';
             const w=document.getElementById('yt-watched-results');if(w)w.replaceChildren();
@@ -12575,7 +12622,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             });
         }
         async function buildLinkedYouTubeFeed(){
-            const subs=await ytApi('subscriptions',{part:'snippet',mine:'true',maxResults:'20'},true);
+            const owner=currentUser?.uid;const subs=await ytApi('subscriptions',{part:'snippet',mine:'true',maxResults:'20'},true);
             const channelIds=(subs.items||[]).map(x=>x.snippet&&x.snippet.resourceId&&x.snippet.resourceId.channelId).filter(Boolean);
             let liked=[];
             try{ const l=await ytApi('videos',{part:'snippet,contentDetails,statistics',myRating:'like',maxResults:'20'},true); liked=(l.items||[]).map(v=>({id:v.id,title:decodeYouTubeText((v.snippet||{}).title||''),channel:decodeYouTubeText((v.snippet||{}).channelTitle||''),channelId:(v.snippet||{}).channelId||'',thumb:ytThumb(v.snippet||{},v.id),durationSec:parseIsoDurationSeconds(v.contentDetails&&v.contentDetails.duration),publishedAt:(v.snippet||{}).publishedAt||'',isShort:parseIsoDurationSeconds(v.contentDetails&&v.contentDetails.duration)<=60})); }catch(e){}
@@ -12583,6 +12630,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             const recent=await enrichYouTubeVideos(recentIds,true);
             const seen=new Set(); const combined=[];
             [...recent,...liked].forEach(v=>{ if(v&&v.id&&!seen.has(v.id)){seen.add(v.id);combined.push(v);} });
+            if(currentUser?.uid!==owner||auth.currentUser?.uid!==owner||impersonating)throw Error('Account changed.');
             saveYouTubeCloudPatch({
                 linkedChannel: ytLinkedChannel || (ytCloudProfile&&ytCloudProfile.linkedChannel) || null,
                 seedChannels: channelIds.slice(0,20),
@@ -12612,17 +12660,27 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         async function loadYouTubeRecommendations(force){
             if (typeof lcToolEnabled !== 'function' || !lcToolEnabled('youtube')) return;
             if(impersonating){showToast('Linked YouTube accounts are unavailable in Login As.');return;}
+            const uid=currentUser?.uid;if(!uid||auth.currentUser?.uid!==uid)return;
             const box=document.getElementById('yt-recommendation-results'), status=document.getElementById('yt-rec-status');
-            await loadYouTubeCloudProfile(false); updateYouTubeAccountUI();
-            if(!force&&ytRecommendationCache.length){ renderYouTubeCards(ytRecommendationCache,'yt-recommendation-results','yt-rec-status'); return; }
-            if(status) status.textContent=ytTokenValid()?'Refreshing from Google and syncing to this chat account…':(ytCloudProfile&&ytCloudProfile.linkedChannel?'Building feed from your synced YouTube profile…':'Building feed from synced watch history…');
-            if(box) box.innerHTML='';
+            if(lcYTRecLoading)return;
+            const seq=++lcYTRecSeq;lcYTRecLoading=seq;
+            const live=()=>seq===lcYTRecSeq&&currentUser?.uid===uid&&auth.currentUser?.uid===uid&&!impersonating;
             try{
-                const feed=ytTokenValid()?await buildLinkedYouTubeFeed():await buildLocalYouTubeFeed();
-                ytRecommendationCache=feed.slice(0,30);
+                await loadYouTubeCloudProfile(false);if(!live())return;updateYouTubeAccountUI();
+                if(lcYTRecPoolUid!==uid||!lcYTRecPool.length||Date.now()-lcYTRecPoolAt>10*60*1000){
+                    if(status)status.textContent='Finding a fresh mix of recommendations…';
+                    const [personal,popular]=await Promise.allSettled([ytTokenValid()?buildLinkedYouTubeFeed():buildLocalYouTubeFeed(),lcYTPopularFeed()]);
+                    if(!live())return;
+                    const combined=[...(personal.status==='fulfilled'?personal.value:[]),...(popular.status==='fulfilled'?popular.value:[])];
+                    if(!combined.length)throw Error(personal.reason?.message||popular.reason?.message||'No videos available.');
+                    lcYTRecPool=[...new Map(combined.filter(v=>v?.id).map(v=>[v.id,v])).values()];lcYTRecPoolUid=uid;lcYTRecPoolAt=Date.now();
+                }
+                if(!live())return;
+                ytRecommendationCache=lcYTFeedRotate(lcYTRecPool);
                 renderYouTubeCards(ytRecommendationCache,'yt-recommendation-results','yt-rec-status');
-                if(!ytTokenValid()&&!getEffectiveYouTubeHistory().length&&!(ytCloudProfile&&ytCloudProfile.linkedChannel)&&status) status.textContent='Starter feed shown. As you watch videos here, your history will sync to this chat account.';
-            }catch(e){ if(status) status.textContent='Could not build feed: '+((e&&e.message)||e); }
+                if(status)status.textContent=ytRecommendationCache.length+' videos · Rotating recommendations from your available feed. Refresh for another mix.';
+            }catch(e){if(live()&&status)status.textContent='Could not refresh feed: '+(e?.message||e);}
+            finally{if(lcYTRecLoading===seq)lcYTRecLoading=0;}
         }
         async function buildShortCandidates(){
             let feed=ytRecommendationCache;
@@ -12916,7 +12974,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             ytResumeAttach(iframe,videoId,Number(meta&&meta.durationSec)||0);
             modal.classList.remove('hidden');document.body.style.overflow='hidden';
             applyUiScale(); // Don't shrink the full-screen-sized viewer with body zoom.
-            saveLocalYouTubeWatch(Object.assign({id:videoId,title:title||'',channel:channel||''},meta||{})); ytRecommendationCache=[]; ytShortsCache=[];
+            saveLocalYouTubeWatch(Object.assign({id:videoId,title:title||'',channel:channel||''},meta||{})); ytRecommendationCache=[]; ytShortsCache=[];lcYTRecPoolAt=0;
         }
         function closeYouTubeFullscreen(){ ytResumeDetach(); const modal=document.getElementById('yt-fullscreen-modal'),holder=document.getElementById('yt-fullscreen-holder');if(holder)holder.innerHTML='';if(modal)modal.classList.add('hidden');document.body.style.overflow=''; modal&&modal.classList.remove('yt-native-fs'); modal&&modal.classList.remove('yt-shorts-mode'); modal&&modal.classList.remove('yt-mini','yt-mini-dragged','yt-mini-dragging'); ytShortsViewIndex=-1; teardownMiniPlayerDrag(); applyUiScale(); }
 
@@ -16717,20 +16775,44 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             return ()=>{if(stopAuth)stopAuth();record=null;input.value='';if(toggle){toggle.removeEventListener('click',open);toggle.hidden=true;}panel.remove();};
         }
 
-        // Local Minecraft launchers: retain opaque iframe isolation and lazy loading.
+        // GAME HOST CONFIGURATION — set only after the device/network administrator
+        // approves the game and its dedicated HTTPS hosting origin. Never use the
+        // LiveChat hostname, a URL shortener, a proxy, or an unreviewed game host.
+        // Keep blank to retain the existing isolated local launcher.
+        const APPROVED_MINECRAFT_HOSTS = Object.freeze({
+            tuff: '',
+            eagler26: ''
+        });
+        function resolveMinecraftHost(game, appHref, hosts) {
+            const local = new URL(game.path, appHref);
+            const configured = hosts[game.hostKey];
+            if (!configured) return {url:local.href, separate:false};
+            try {
+                const app = new URL(appHref), target = new URL(configured);
+                if(target.protocol !== 'https:' || target.username || target.password || target.search || target.hash ||
+                   target.origin === app.origin || target.hostname === app.hostname ||
+                   target.hostname.endsWith('.'+app.hostname) || app.hostname.endsWith('.'+target.hostname))
+                    throw Error('The approved game host must be a separate HTTPS hostname, with no login data, query or fragment.');
+                return {url:target.href, separate:true};
+            } catch (_) { return {error:'Invalid approved game host. Ask the site operator to configure a separate, reviewed HTTPS origin. The sandbox has not been relaxed.'}; }
+        }
+        // A reviewed separate origin can use its own storage. A local game must
+        // never receive allow-same-origin. No automatic alternate-host fallback.
         function initLocalMinecraft(stage, game) {
-            const url = new URL(game.path, window.location.href).href;
+            const resolved = resolveMinecraftHost(game, window.location.href, APPROVED_MINECRAFT_HOSTS);
+            if (resolved.error) {const error=document.createElement('p');error.textContent=resolved.error;error.style.cssText='padding:20px;color:#f9e4ab';stage.appendChild(error);return ()=>error.remove();}
+            const {url,separate}=resolved;
             document.getElementById('game-player').classList.add('lc-tuff-running');document.getElementById('gp-tuff-stop').hidden=false;applyUiScale();
             const shell = document.createElement('div');
             shell.style.cssText='position:relative;display:flex;flex-direction:column;width:100%;height:100%;min-height:0;min-width:0;overflow:hidden;background:#10121a';
-            const hint=document.createElement('div');hint.className='tuff-focus-hint';hint.textContent='Keyboard won’t work until you press ⌨ Focus game. Then click the in-game field. Close minimizes without reloading; End game unloads it. Automatic saves after reload are not supported by this isolated launcher.';
+            const hint=document.createElement('div');hint.className='tuff-focus-hint';hint.textContent='Keyboard won’t work until you press ⌨ Focus game. Then click the in-game field. Close minimizes without reloading; End game unloads it. '+(separate?'Game-host browser storage is enabled where permitted; saves are not synced to your LiveChat account.':'Local isolated mode: automatic saves after reload are not supported.');
             const viewport=document.createElement('div');viewport.style.cssText='position:relative;flex:1;min-height:0;overflow:hidden';
             const frame = document.createElement('iframe');
             frame.title=game.title;
             frame.tabIndex=0;
             frame.setAttribute('aria-label',game.title+' — press Focus game before typing or playing');
             frame.style.cssText='display:block;width:100%;height:100%;border:0;background:#10121a';
-            frame.setAttribute('sandbox','allow-scripts allow-pointer-lock allow-downloads');
+            frame.setAttribute('sandbox','allow-scripts allow-pointer-lock allow-downloads'+(separate?' allow-same-origin':''));
             frame.setAttribute('allow','fullscreen; autoplay; gamepad; camera \'none\'; microphone \'none\'; geolocation \'none\'; clipboard-read \'none\'; clipboard-write \'none\'');
             frame.setAttribute('allowfullscreen','');
             frame.setAttribute('referrerpolicy','no-referrer');
@@ -16741,10 +16823,16 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             const detail=document.createElement('span'); detail.textContent='The first load may take a little longer. Press Focus game once it finishes loading to use your keyboard.';
             status.append(heading,detail);
             let disposed=false, missing=false;
+            const diagnostic=document.createElement('span');diagnostic.style.cssText='font-size:11px;color:#e4d7a3';
+            const diagButton=document.createElement('button');diagButton.type='button';diagButton.textContent='Game not loading?';diagButton.style.cssText='margin-left:8px;padding:3px 7px;font-size:11px;cursor:pointer';
+            const diagnosticText=()=>game.title+'\nGame URL: '+url+'\n'+diagnostic.textContent+'\nIframe load event: '+(ready?'received (not proof of successful startup)':'not received')+'\nSandbox: '+(separate?'separate approved origin; game-host storage allowed.':'opaque local origin; browser storage restricted.')+'\nIf the screen is blank, the device administrator can check startup errors and approved browser settings. Do not disable the sandbox.';
+            diagButton.onclick=()=>{alert(diagnosticText());};hint.append(' ',diagButton);
+            diagnostic.textContent=separate?'Approved separate game host. Game startup cannot be verified from LiveChat.':'Checking the deployed game file…';status.append(diagnostic);
             const aborter=new AbortController();
             const focusButton=document.getElementById('gp-focus-game');
             const player=document.getElementById('game-player');
             let ready=false;
+            const loadTimer=setTimeout(()=>{if(!disposed&&!ready&&!missing){heading.textContent='Still waiting for '+game.title;detail.textContent='The game has not reported a page load. Check the approved hosting address or ask the device administrator. No alternate host will be tried.';}},25000);
             function focusGame(){
                 if(disposed||missing||!ready||!frame.isConnected||!player?.classList.contains('show'))return;
                 // Focus only the iframe, never read its isolated document or forward keystrokes.
@@ -16752,7 +16840,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             }
             function loaded(){
                 if(disposed||missing)return;
-                ready=true;status.remove();
+                ready=true;clearTimeout(loadTimer);status.remove();
                 if(focusButton)focusButton.disabled=false;
                 // Require a deliberate click on Focus game; do not steal keyboard focus on load.
             }
@@ -16766,16 +16854,23 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             const gameUid=currentUser?.uid;const unwatchGameAuth=auth.onAuthStateChanged(u=>{if(!disposed&&u?.uid!==gameUid)window.closeGame(true);});
             // A lightweight HEAD check can distinguish a missing deployment from loading.
             // Do not block the game on this optional check or fall back to an unsafe iframe.
-            fetch(url,{method:'HEAD',cache:'no-store',signal:aborter.signal,credentials:'omit'})
-                .then(r=>{if(r.status===404||r.status===410)unavailable();}).catch(()=>{});
+            if(!separate)fetch(url,{method:'HEAD',cache:'no-store',signal:aborter.signal,credentials:'omit'})
+                .then(async r=>{if(disposed)return;const size=Number(r.headers.get('content-length')||0);diagnostic.textContent='HTTP '+r.status+(size?' · '+Math.round(size/1024)+' KiB':'');
+                    if(r.status===404||r.status===410){unavailable();return;}
+                    if(!r.ok){diagnostic.textContent+=' · Deployment request failed.';return;}
+                    if(size>0&&size<4096){const small=await fetch(url,{cache:'no-store',signal:aborter.signal,credentials:'omit'});if(disposed)return;const text=await small.text();if(disposed)return;
+                        if(text.startsWith('version https://git-lfs.github.com/spec/v1')){missing=true;heading.textContent='Game file is a Git LFS pointer';detail.textContent='The deployed index.html is only a reference, not the actual game. Upload the real game file to the repository and redeploy.';diagnostic.textContent='Git LFS pointer detected · '+size+' bytes';if(focusButton)focusButton.disabled=true;if(!status.isConnected)viewport.appendChild(status);}
+                        else diagnostic.textContent+=' · Unexpectedly small game file; confirm it is the complete download.';
+                    }
+                }).catch(e=>{if(!disposed)diagnostic.textContent='Could not check deployment: '+(e?.message||'network error');});
             return ()=>{
-                disposed=true;unwatchGameAuth?.();cleanupBackup();aborter.abort();frame.removeEventListener('load',loaded);document.getElementById('game-player').classList.remove('lc-tuff-running','lc-tuff-mini');document.getElementById('gp-tuff-restore').hidden=true;document.getElementById('gp-tuff-stop').hidden=true;
+                disposed=true;clearTimeout(loadTimer);unwatchGameAuth?.();cleanupBackup();aborter.abort();frame.removeEventListener('load',loaded);document.getElementById('game-player').classList.remove('lc-tuff-running','lc-tuff-mini');document.getElementById('gp-tuff-restore').hidden=true;document.getElementById('gp-tuff-stop').hidden=true;
                 if(focusButton){focusButton.removeEventListener('click',focusGame);focusButton.hidden=true;focusButton.disabled=false;}
                 frame.remove();shell.remove();
             };
         }
-        [{title:'Tuff Client',icon:'⛏️',path:'./tuff-client/index.html',backup:true},
-         {title:'Eaglercraft 26.2',icon:'🧱',path:'./eaglercraft-26.2/index.html',backup:false}].forEach(game=>{
+        [{title:'Tuff Client',icon:'⛏️',path:'./tuff-client/index.html',hostKey:'tuff',backup:true},
+         {title:'Eaglercraft 26.2',icon:'🧱',path:'./eaglercraft-26.2/index.html',hostKey:'eagler26',backup:false}].forEach(game=>{
             GAMES.push({title:game.title,icon:game.icon,localMinecraft:true,init:stage=>initLocalMinecraft(stage,game)});
         });
 
@@ -17592,9 +17687,10 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
     const _youtubeQuotaStopPatched=youtubeQuotaStop; youtubeQuotaStop=function(){_youtubeQuotaStopPatched();updateYouTubeRequestToggle();};
 
     function resetAccountScopedTransientUi(){
+        lcAvatarHistoryRender++;document.getElementById('lc-avatar-history-grid')?.replaceChildren();document.getElementById('profile-modal')?.classList.add('hidden');const avatarNote=document.getElementById('lc-avatar-history-note');if(avatarNote)avatarNote.textContent='';
         if(document.getElementById('game-player')?.classList.contains('lc-tuff-running'))window.closeGame?.(true);
         try{ if(ytSearchAbort)ytSearchAbort.abort(); }catch(e){}
-        lcYTRequestCache.clear();lcYTInFlight.clear();ytOAuthToken='';ytOAuthExpiresAt=0;ytOAuthOwnerUid=null;ytOAuthTokenClient=null;ytLinkedChannel=null;ytRecommendationCache=[];ytShortsCache=[];ytCloudProfile=null;ytCloudProfileLoadedFor=null;currentFullscreenVideo=null;
+        lcYTRequestCache.clear();lcYTInFlight.clear();lcYTRecPool=[];lcYTRecPoolUid='';lcYTRecPoolAt=0;lcYTRecSeq++;lcYTRecLoading=0;ytOAuthToken='';ytOAuthExpiresAt=0;ytOAuthOwnerUid=null;ytOAuthTokenClient=null;ytLinkedChannel=null;ytRecommendationCache=[];ytShortsCache=[];ytCloudProfile=null;ytCloudProfileLoadedFor=null;currentFullscreenVideo=null;
         ['yt-search-input','yt-api-key-input','yt-oauth-client-input','yt-key-share-code','yt-key-redeem-code','sidebar-search','admin-search','admin-global-server-search'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
         ['yt-search-results','yt-recommendation-results','yt-shorts-feed','yt-saved-results','yt-shared-keys-list','yt-key-share-grantees'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
         const st=document.getElementById('yt-search-status');if(st)st.textContent='Search for videos, creators, and Shorts.';
@@ -19488,7 +19584,8 @@ function profiles(parent){h(parent,'Profiles');parent.append(create('p','','Pers
  const bioLabel=create('label','','About Me');const bio=create('textarea');bio.id='lc-field-bio';bio.maxLength=190;bio.value=publicData.bio||'';controls.append(bioLabel,bio,create('p','lc-muted','Up to 190 characters; shown to other LiveChat members.'));
  const bannerLbl=create('label','','Banner color');const color=create('input');color.type='color';color.value=safeColor(publicData.bannerColor);controls.append(bannerLbl,color);
  function fileButton(textLabel,onUpload){const b=action(controls,textLabel,()=>{if(isImpersonated()){toast('Profile uploads are unavailable during Login As.');return}const input=create('input');input.type='file';input.accept='image/png,image/jpeg,image/webp,image/gif';input.onchange=async()=>{const file=input.files?.[0];if(file)await onUpload(file)};input.click()},'lc-secondary');return b}
- fileButton('Upload avatar',async file=>{try{const chosen=await window.lcProfileMedia.open(file,'avatar');if(!chosen)return;await db.ref('users/'+currentUser.uid+'/avatar').set(chosen.data);userAvatarCache[currentUser.uid]=chosen.data;avatarPreview=chosen.data;await writeProfile({avatarCrop:chosen.crop||null});if(typeof refreshMyAvatarUI==='function')refreshMyAvatarUI();if(typeof renderFriendsList==='function')renderFriendsList();renderProfilePreview();toast('Avatar updated')}catch(e){toast(e.message)}});
+ fileButton('Upload avatar',async file=>{const uid=currentUser?.uid;if(!lcAvatarOwner(uid)||lcAvatarSaving)return;lcAvatarBusy(true);try{const chosen=await window.lcProfileMedia.open(file,'avatar');if(!chosen||!lcAvatarOwner(uid))return;await lcSaveAvatar(uid,chosen.data,chosen.crop);avatarPreview=chosen.data;renderProfilePreview();toast('Avatar updated')}catch(e){toast(e.message)}finally{lcAvatarBusy(false)}});
+ action(controls,'Choose a previous or preset avatar',()=>{closeSettings();lcOpenAvatarPicker()},'lc-secondary');
  fileButton('Upload banner',async file=>{try{const chosen=await window.lcProfileMedia.open(file,'banner');if(!chosen)return;const saved=await writeProfile({banner:chosen.data,bannerCrop:chosen.crop||null,bannerCropped:true});if(saved){bannerData=chosen.data;renderProfilePreview()}}catch(e){toast(e.message)}});
  action(controls,'Remove banner',async()=>{const saved=await writeProfile({banner:'',bannerCrop:null,bannerCropped:false});if(saved){bannerData='';renderProfilePreview()}},'lc-secondary');
  controls.append(create('label','','Avatar Decorations — Free'));
