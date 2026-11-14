@@ -316,12 +316,16 @@
         /* Mobile Adjustments */
         #chat-header-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         /* "Call in progress" bar for late-joiners */
-        #server-call-bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; font-size: 14px; font-weight: 700; }
-        #server-call-bar .server-call-bar-actions { margin-left: auto; display: flex; gap: 8px; }
-        #server-call-bar button { border: none; border-radius: 8px; padding: 7px 16px; font-weight: 700; font-size: 13px; cursor: pointer; }
-        #server-call-bar .scb-join { background: #fff; color: #16a34a; }
-        #server-call-bar .scb-dismiss { background: rgba(255,255,255,.22); color: #fff; }
+        #server-call-bar { position: relative; z-index: 85; isolation: isolate; flex: 0 0 auto; box-sizing: border-box; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: linear-gradient(135deg, #16803f, #126b36); color: #fff; font-size: 14px; font-weight: 700; }
+        #server-call-bar-text { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #server-call-bar .server-call-bar-actions { flex: 0 0 auto; margin-left: auto; display: flex; gap: 8px; }
+        #server-call-bar button { flex: 0 0 auto; border: none; border-radius: 8px; padding: 8px 14px; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; min-height: 34px; }
+        #server-call-bar .scb-join { background: #fff; color: #126b36; }
         #server-call-bar button:hover { filter: brightness(1.05); }
+        #server-call-bar button:disabled { opacity: .7; cursor: wait; }
+        #chat-area:has(#server-call-bar:not(.hidden)) #lc-members-panel,
+        #chat-area:has(#server-call-bar:not(.hidden)) #lc-grade-side { top: var(--lc-call-panel-top, 105px); }
+        @media(max-width: 480px) { #server-call-bar { font-size: 12px; padding: 6px 8px; } #server-call-bar button { padding: 7px 10px; } }
         @media screen and (max-width: 768px) {
             #sidebar { width: 100%; border-right: none; }
             #chat-area { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: none; }
@@ -2918,6 +2922,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 <button id="tab-members" class="active" onclick="switchSettingsTab('members')">Members</button>
                 <button id="tab-invite" onclick="switchSettingsTab('invite')">Invite</button>
                 <button id="tab-roles" onclick="switchSettingsTab('roles')">Roles</button>
+<button id="tab-rules" onclick="switchSettingsTab('rules')">Rules</button><button id="tab-apps" onclick="switchSettingsTab('apps')">Installed Apps</button>
             </div>
             <div id="settings-members-pane">
                 <div id="settings-members" class="settings-scroll"></div>
@@ -2935,7 +2940,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 <div id="settings-invite-list" class="settings-scroll"></div>
                 <button onclick="sendSelectedInvites()" style="background:#2ecc71;">Send Invites</button>
             </div>
-            <button class="cancel" onclick="closeServerSettings()">Close</button>
+            <div id="settings-rules-pane" class="hidden settings-scroll"></div><div id="settings-apps-pane" class="hidden settings-scroll"></div><button class="cancel" onclick="closeServerSettings()">Close</button>
         </div>
     </div>
 
@@ -3175,8 +3180,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             <div id="server-call-bar" class="hidden">
                 <span id="server-call-bar-text">📞 Call in progress</span>
                 <div class="server-call-bar-actions">
-                    <button class="scb-join" onclick="joinActiveServerCall()">Join</button>
-                    <button class="scb-dismiss" onclick="dismissServerCallBar()">Dismiss</button>
+                    <button type="button" id="server-call-join-btn" class="scb-join" onclick="joinActiveServerCall()" aria-label="Join active server call">Join call</button>
                 </div>
             </div>
             <div id="admin-server-mode-bar" class="hidden">
@@ -5787,7 +5791,8 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     renderServerSettings();
                     if (!document.getElementById('settings-roles-pane').classList.contains('hidden')) renderCustomServerRoles();
                 }
-                window.lcPlus?.serverChanged(groupId);
+                window.lcPlus?.serverChanged(groupId);lcRefreshBotButtons(groupId);
+                if(isSettingsOpenFor(groupId)&&!document.getElementById('settings-apps-pane').classList.contains('hidden'))lcAppList(groupId,document.getElementById('settings-apps-pane'),true);
             });
         }
 
@@ -5842,7 +5847,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             const color=document.getElementById('new-server-role-color').value;
             if (!/^[A-Za-z0-9 _-]{2,32}$/.test(name))return showToast('Use 2–32 letters, numbers, spaces, _ or - for the role.');
             if(Object.keys(serverData[gid]?.roleDefinitions||{}).length>=16)return showToast('Maximum 16 custom roles per server.');
-            try { await db.ref('groups/'+gid+'/roleDefinitions').push().set({name,color,canModerate:false,canInvite:false,canManageRoles:false,canUseBasicCommands:false});
+            try { await db.ref('groups/'+gid+'/roleDefinitions').push().set({name,color,canModerate:false,canInvite:false,canManageRoles:false,canUseBasicCommands:false,canManageApps:false});
                 document.getElementById('new-server-role-name').value='';showToast('Role created');renderCustomServerRoles();
             }catch(e){showToast('Could not create role: '+e.message);}
         }
@@ -5864,6 +5869,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     ['canUseBasicCommands','Use Basic Commands','Use /me, /shrug and /roll'],
                     ['canInvite','Invite members','Invite people to this server, including server invitations'],
                     ['canModerate','Moderate members','Remove, ban, or mute members within existing server rules'],
+                    ['canManageApps','Manage Apps','Install/uninstall apps, view Installed Apps and reveal bot answers'],
                     ['canManageRoles','Manage server roles','Create and edit custom role permissions; cannot transfer server ownership']
                 ];
                 const ownerOnly=getMyRole(gid)==='owner';
@@ -5872,7 +5878,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 permissionArea.style.cssText='display:flex;flex-wrap:wrap;gap:9px;width:100%;padding:5px 0';
                 for(const [key,label,detail] of permissions){
                     const l=document.createElement('label');l.style.cssText='display:flex;gap:5px;align-items:flex-start;max-width:270px';
-                    const ck=document.createElement('input');ck.type='checkbox';ck.checked=!!role[key];ck.disabled=key==='canManageRoles'&&!ownerOnly;
+                    const ck=document.createElement('input');ck.type='checkbox';ck.checked=!!role[key];ck.disabled=['canManageRoles','canManageApps'].includes(key)&&!ownerOnly;
                     ck.title=detail;
                     ck.onchange=()=>db.ref('groups/'+gid+'/roleDefinitions/'+id+'/'+key).set(ck.checked)
                         .catch(e=>{ck.checked=!ck.checked;showToast(e.message)});
@@ -5945,7 +5951,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 }
 
                 // Gear button for owner/admin quick access to settings
-                if (canServerModerate(groupId) || canServerInvite(groupId)) {
+                if (canServerModerate(groupId) || canServerInvite(groupId) || lcCanManageApps(groupId) || canManageServerRoles(groupId)) {
                     const gear = document.createElement('button');
                     gear.className = 'server-gear';
                     gear.innerText = '⚙️';
@@ -6171,8 +6177,9 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             }
         }
 
-        function joinServer(groupId) {
-            db.ref('groups/' + groupId).once('value').then(async snap => {
+        function joinServer(groupId) {return lcServerEntry(groupId,()=>lcJoinServerCore(groupId));}
+        function lcJoinServerCore(groupId) {
+            return db.ref('groups/' + groupId).once('value').then(async snap => {
                 const sd = snap.val();
                 if (!sd) { await db.ref(`groupInvites/${currentUser.uid}/${groupId}`).remove().catch(() => {}); alert('That server no longer exists.'); return; }
                 if (sd.banned && sd.banned[currentUser.uid]) { alert('You are banned from this server.'); return; }
@@ -6181,9 +6188,10 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     alert('This server is full (' + MAX_SERVER_MEMBERS + ' members).'); return;
                 }
                 // Keep invite proof until membership is written.
-                await db.ref(`groups/${groupId}/members/${currentUser.uid}`).set({ role: 'peasant', username: myUsername });
+                if(!sd.members?.[currentUser.uid])await db.ref(`groups/${groupId}/members/${currentUser.uid}`).set({ role: 'peasant', username: myUsername });
                 await db.ref(`userGroups/${currentUser.uid}/${groupId}`).set({ name: sd.name });
                 await db.ref(`groupInvites/${currentUser.uid}/${groupId}`).remove();
+                if(!sd.members?.[currentUser.uid]&&sd.installedApps?.welcome)lcAppRequest(groupId,'welcome','','welcome').catch(()=>{});
             }).catch(err => { console.warn('Join server failed:', err); showToast('Could not join server.'); });
         }
 
@@ -6195,7 +6203,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         function openServerSettings(groupId) {
             hideServerContextMenu();
             const role = getMyRole(groupId);
-            if (!canServerModerate(groupId) && !canServerInvite(groupId) && !canManageServerRoles(groupId)) { alert('You do not have server settings permissions.'); return; }
+            if (!canServerModerate(groupId) && !canServerInvite(groupId) && !canManageServerRoles(groupId) && !lcCanManageApps(groupId)) { alert('You do not have server settings permissions.'); return; }
             ctxTargetGroupId = groupId;
             const sd = serverData[groupId] || {};
             document.getElementById('settings-title').innerText = '⚙️ ' + (sd.name || 'Server');
@@ -6216,6 +6224,9 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         function switchSettingsTab(tab) {
             const groupId = ctxTargetGroupId;
             if (tab === 'roles' && !canManageServerRoles(groupId)) tab = 'members';
+            if(tab==='rules'&&!lcRulesOwner(groupId))tab='members';if(tab==='apps'&&!lcCanManageApps(groupId))tab='members';
+            for(const [key,allowed] of [['rules',lcRulesOwner(groupId)],['apps',lcCanManageApps(groupId)]]){document.getElementById('tab-'+key).classList.toggle('hidden',!allowed);document.getElementById('tab-'+key).classList.toggle('active',tab===key);document.getElementById('settings-'+key+'-pane').classList.toggle('hidden',tab!==key);}
+            if(tab==='rules')lcRenderRulesSettings(groupId);if(tab==='apps')lcAppList(groupId,document.getElementById('settings-apps-pane'),true);
             const isMembers = tab === 'members', isInvite = tab === 'invite', isRoles = tab === 'roles';
             document.getElementById('tab-members').classList.toggle('active', isMembers);
             document.getElementById('tab-invite').classList.toggle('active', isInvite);
@@ -6982,8 +6993,19 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
         function groupSlot(gid) { return db.ref('groupCallSlots/'+gid); }
         function dmSlot(a,b) { return db.ref('directCallSlots/'+[a,b].sort().join('_')); }
-        function liveGroupRoom(c) {
-            return c && c.meta?.status !== 'ended' && Object.values(c.participants||{}).some(p => p?.status==='joined' && (!p.heartbeat || callSlotNow()-p.heartbeat < CALL_SLOT_MS));
+        function liveGroupParticipants(c) {
+            if (!c?.meta || c.meta.status === 'ended') return [];
+            return Object.entries(c.participants || {}).filter(([,p]) => p?.status === 'joined' && !p.hidden &&
+                (Number(p.heartbeat) > 0 ? callSlotNow()-Number(p.heartbeat) < CALL_SLOT_MS :
+                    Number(p.joinedAt || c.meta.startedAt) > 0 && callSlotNow()-Number(p.joinedAt || c.meta.startedAt) < CALL_SLOT_MS));
+        }
+        function liveGroupRoom(c) { return liveGroupParticipants(c).length > 0; }
+        function findActiveServerCall(rooms, groupId, groupName) {
+            const live = Object.entries(rooms || {}).filter(([,c]) => liveGroupRoom(c));
+            live.sort((a,b) => Number(b[1].meta.startedAt||0)-Number(a[1].meta.startedAt||0) || b[0].localeCompare(a[0]));
+            if (!live.length) return null;
+            const [callId,c] = live[0];
+            return {groupId, groupName, callId, type:c.meta.type==='video'?'video':'audio',callerName:c.meta.callerName||'',count:liveGroupParticipants(c).length};
         }
         function startGroupCallHeartbeat() {
             if (!gcState || !currentUser || gcState._heartbeatTimer) return;
@@ -7003,19 +7025,35 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
 
         async function startGroupCall(type) {
-            if (!firebaseReady || !currentChatData?.isGroup || !currentUser) return;
-            if (gcState || currentCall || callStartPending || callAnswerClaimPending) { showToast('You already have a call in progress.'); return; }
-            callStartPending=true;
+            if (!firebaseReady || !currentChatData?.isGroup || !currentUser || impersonating) return;
             const groupId=currentChatData.groupId, groupName=currentChatData.name, uid=currentUser.uid;
+            if (gcState?.groupId === groupId) { if(gcState.localStream) maximizeGroupCall(); else showToast('Connecting to your call…'); return; }
+            if (gcState || currentCall || callStartPending || callAnswerClaimPending) { showToast('You already have a call in progress.'); return; }
+            const stillHere=()=>currentUser?.uid===uid && !impersonating && currentChatData?.isGroup && currentChatData.groupId===groupId;
+            callStartPending=true; updateServerCallBar();
             const callId='gc_'+Date.now()+'_'+Math.random().toString(36).slice(2), sessionId=gcSessionId();
             const slot=groupSlot(groupId), room=db.ref('groupCalls/'+groupId+'/'+callId);
             let claimed=false, ownWritten=false, metaWritten=false;
             try {
                 const rooms=(await db.ref('groupCalls/'+groupId).once('value')).val()||{};
-                if(Object.values(rooms).some(liveGroupRoom)) { showToast('A call is already running in this server. Use Join call.'); return; }
+                if(!stillHere())return;
+                const existing=findActiveServerCall(rooms,groupId,groupName);
+                if(existing){ callStartPending=false; return await joinGroupCallData(existing); }
                 claimed=await claimCallSlot(slot,{callId,creator:uid});
-                if(!claimed){showToast('A call is already starting or running. Use Join call.');return;}
+                if(!claimed){
+                    // Another member may have reserved the slot just before us.
+                    // Give their room time to appear, then join rather than create a second call.
+                    for(let attempt=0;attempt<4 && stillHere();attempt++){
+                        if(attempt)await new Promise(r=>setTimeout(r,600));
+                        const live=findActiveServerCall((await db.ref('groupCalls/'+groupId).once('value')).val(),groupId,groupName);
+                        if(!stillHere())return;
+                        if(live){callStartPending=false;return await joinGroupCallData(live);}
+                    }
+                    if(stillHere())showToast('A call is starting. Try the call button again shortly.');return;
+                }
+                if(!stillHere()){await releaseCallSlot(slot,callId);return;}
                 const members=(await db.ref('groups/'+groupId+'/members').once('value')).val()||{};
+                if(!stillHere()){await releaseCallSlot(slot,callId);return;}
                 const myPartRef=room.child('participants/'+uid);
                 await room.child('meta').set({caller:uid,callerName:myUsername,type,groupName,startedAt:firebase.database.ServerValue.TIMESTAMP});
                 metaWritten=true;
@@ -7026,7 +7064,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             } catch(e) {
                 if(claimed){if(ownWritten)await room.child('participants/'+uid).update({status:'left',heartbeat:null}).catch(()=>{}); if(metaWritten)await room.remove().catch(()=>{}); await releaseCallSlot(slot,callId);}
                 showToast('Could not start group call: '+e.message);
-            } finally {callStartPending=false;}
+            } finally {callStartPending=false;updateServerCallBar();}
         }
 
         function initGcState(groupId, groupName, callId, type, isInitiator, monitor, sessionId) {
@@ -7666,16 +7704,18 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         // Shared join used by the ringing banner AND the "Call in progress" bar.
         async function joinGroupCallData(data) {
             // Group calls prepare TURN during join when the owner has enabled it.
-            if (!data) return;
+            if (!data || !currentUser || impersonating) return;
+            if (gcState?.groupId===data.groupId && gcState.callId===data.callId) { if(gcState.localStream)maximizeGroupCall();else showToast('Connecting to your call…');return; }
             if (gcState || currentCall || callStartPending || callAnswerClaimPending) { showToast('You already have a call in progress.'); return; }
-            callStartPending=true;
+            const joiningUid=currentUser.uid;
+            callStartPending=true;updateServerCallBar();
             const partsRef = db.ref(`groupCalls/${data.groupId}/${data.callId}/participants`);
             // The database rules grant participants/$uid write access, not writes to
             // the whole participants collection. A transaction on that collection
             // always fails with PERMISSION_DENIED for regular members.
-            (async () => {
+            return (async () => {
                 try {
-                    if (!currentUser?.uid)throw new Error('Sign in to join the call.');
+                    if (currentUser?.uid!==joiningUid || impersonating)throw new Error('Sign in to join the call.');
                     const isMember=serverData[data.groupId]?.members?.[currentUser.uid] ||
                         (await db.ref('groups/'+data.groupId+'/members/'+currentUser.uid).once('value')).val();
                     if (!isMember)throw new Error('You are no longer a member of this server.');
@@ -7683,17 +7723,21 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     if(!live?.meta || live.meta.status==='ended' || !liveGroupRoom(live))throw new Error('This call has ended.');
                     const snapshot = await partsRef.once('value');
                     const participants = snapshot.val() || {};
-                    const alreadyIn = participants[currentUser.uid]?.status === 'joined';
-                    const joined = Object.entries(participants).filter(([id,p]) =>
-                        id !== currentUser.uid && p?.status === 'joined' && !p.hidden && (!p.heartbeat||callSlotNow()-p.heartbeat<CALL_SLOT_MS)).length;
+                    if(currentUser?.uid!==joiningUid || impersonating)throw new Error('Your account changed. Try again.');
+                    const liveParticipants = liveGroupParticipants({meta:live.meta,participants});
+                    if(!liveParticipants.length)throw new Error('This call has ended.');
+                    const joined = liveParticipants.filter(([id])=>id!==joiningUid).length;
                     if (joined >= MAX_CALL_PARTICIPANTS)
                         throw new Error('This call is full (' + MAX_CALL_PARTICIPANTS + ' people maximum).');
-                    const ownRef = partsRef.child(currentUser.uid);
-                    const sessionId=gcSessionId();
-                    await ownRef.set({username:myUsername, type:data.type, status:'joined',sessionId,
+                    const ownRef = partsRef.child(joiningUid);
+                    const sessionId=gcSessionId(), type=live.meta.type==='video'?'video':'audio';
+                    await ownRef.set({username:myUsername, type, status:'joined',sessionId,
                         joinedAt:firebase.database.ServerValue.TIMESTAMP,heartbeat:firebase.database.ServerValue.TIMESTAMP});
-                    try { await initGcState(data.groupId,data.groupName,data.callId,data.type,false,false,sessionId); }
-                    catch (e) { await ownRef.update({status:'left'}).catch(()=>{}); throw e; }
+                    try {
+                        if(currentUser?.uid!==joiningUid || impersonating)throw new Error('Your account changed. Try again.');
+                        if(gcIncoming?.callId===data.callId && gcIncoming?.groupId===data.groupId){gcIncoming=null;hideGroupCallInvite();}
+                        await initGcState(data.groupId,data.groupName,data.callId,type,false,false,sessionId);
+                    } catch (e) { await ownRef.transaction(p=>p?.sessionId===sessionId?{...p,status:'left',heartbeat:null}:undefined,undefined,false).catch(()=>{}); throw e; }
                 } catch (e) {
                     console.error('Group-call join failed:',e);
                     const msg = String(e?.message||e||'Unknown error');
@@ -7701,7 +7745,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     alert('Could not join the call: ' + (/permission_denied|permission denied/i.test(msg)
                         ? 'The server denied the participant write. Verify the groupCalls participant Firebase rules.'
                         : msg.slice(0,180)));
-                } finally {callStartPending=false;}
+                } finally {callStartPending=false;updateServerCallBar();}
             })();
         }
 
@@ -7709,65 +7753,63 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         //  "CALL IN PROGRESS" BAR  (join a server's call late)
         //  Shown at the top of a server when that server has a live group
         //  call and you're not already in it. Lets anyone who missed the
-        //  ring (or auto-dismissed it after 10s) jump in — or dismiss the bar.
+        //  ring (or auto-dismissed it after 10s) jump in. The bar stays available.
         // ============================================================
-        let activeServerCall = null;      // { groupId, callId, groupName, type, callerName, count }
-        let serverCallBarRef = null;      // live listener on groupCalls/{groupId}
-        let serverCallBarGroupId = null;
-        const dismissedCallIds = {};      // callIds the user chose to dismiss
-
+        let activeServerCall = null;
+        let serverCallBarRef = null, serverCallBarGroupId = null, serverCallBarCallback = null;
+        let serverCallBarTimer = null, serverCallRooms = {}, serverCallWatchGeneration = 0;
+        function syncServerCallPanelTop() {
+            const bar=document.getElementById('server-call-bar'), area=document.getElementById('chat-area');
+            if(bar && area && !bar.classList.contains('hidden')) area.style.setProperty('--lc-call-panel-top', (bar.offsetTop+bar.offsetHeight)+'px');
+        }
+        if(typeof ResizeObserver==='function') {
+            const callBarObserver=new ResizeObserver(syncServerCallPanelTop);
+            for(const id of ['server-call-bar','chat-header','chat-area']) { const el=document.getElementById(id); if(el)callBarObserver.observe(el); }
+        }
         function watchServerCall(groupId, groupName) {
             detachServerCallWatch();
-            serverCallBarGroupId = groupId;
-            serverCallBarRef = db.ref('groupCalls/' + groupId);
-            serverCallBarRef.on('value', snap => {
-                const calls = snap.val() || {};
-                let active = null;
-                for (const cid in calls) {
-                    const c = calls[cid]; if (!c) continue;
-                    if (!liveGroupRoom(c)) continue;
-                    const parts = c.participants || {};
-                    const joined = Object.keys(parts).filter(k => parts[k] && parts[k].status === 'joined' && !parts[k].hidden && (!parts[k].heartbeat||callSlotNow()-parts[k].heartbeat<CALL_SLOT_MS));
-                    if (joined.length > 0) {
-                        active = { groupId: groupId, callId: cid, groupName: groupName,
-                            type: (c.meta && c.meta.type) || 'audio',
-                            callerName: (c.meta && c.meta.callerName) || '', count: joined.length };
-                        break;
-                    }
-                }
-                activeServerCall = active;
-                updateServerCallBar();
-            });
+            if(impersonating)return;
+            const generation=serverCallWatchGeneration, uid=currentUser?.uid;
+            serverCallBarGroupId=groupId;
+            serverCallBarRef=db.ref('groupCalls/'+groupId);
+            const current=()=>generation===serverCallWatchGeneration && currentUser?.uid===uid && !impersonating;
+            const refresh=()=>{if(!current())return; activeServerCall=findActiveServerCall(serverCallRooms,groupId,groupName);updateServerCallBar();};
+            serverCallBarCallback=snap=>{if(!current())return;serverCallRooms=snap.val()||{};refresh();};
+            serverCallBarRef.on('value',serverCallBarCallback,error=>{if(!current())return;serverCallRooms={};refresh();console.warn('Server call watch:',error?.message||error);});
+            // Re-evaluate heartbeat expiration locally even if no Firebase event arrives.
+            serverCallBarTimer=setInterval(refresh,5000);
         }
         function detachServerCallWatch() {
-            if (serverCallBarRef) { serverCallBarRef.off('value'); serverCallBarRef = null; }
-            serverCallBarGroupId = null;
-            activeServerCall = null;
-            const bar = document.getElementById('server-call-bar');
-            if (bar) bar.classList.add('hidden');
+            serverCallWatchGeneration++;
+            if(serverCallBarRef && serverCallBarCallback)serverCallBarRef.off('value',serverCallBarCallback);
+            if(serverCallBarTimer)clearInterval(serverCallBarTimer);
+            serverCallBarRef=null;serverCallBarCallback=null;serverCallBarTimer=null;serverCallBarGroupId=null;
+            serverCallRooms={};activeServerCall=null;updateServerCallBar();
         }
         function updateServerCallBar() {
-            const bar = document.getElementById('server-call-bar');
-            if (!bar) return;
-            const a = activeServerCall;
-            const inThisCall = gcState && a && gcState.callId === a.callId;
-            const show = a && !inThisCall && !dismissedCallIds[a.callId];
-            if (!show) { bar.classList.add('hidden'); return; }
-            const who = a.callerName ? (' · started by ' + a.callerName) : '';
-            const cnt = a.count ? (' · ' + a.count + ' in call') : '';
-            document.getElementById('server-call-bar-text').innerText =
-                (a.type === 'video' ? '📹' : '📞') + ' Call in progress' + who + cnt;
-            bar.classList.remove('hidden');
+            const bar=document.getElementById('server-call-bar'),btn=document.getElementById('server-call-join-btn');
+            if(!bar||!btn)return;
+            const a=activeServerCall, groupId=currentChatData?.isGroup?currentChatData.groupId:null;
+            const inThisCall=gcState && a && gcState.groupId===a.groupId && gcState.callId===a.callId;
+            const show=!!(a && a.groupId===groupId && !inThisCall && !impersonating);
+            bar.classList.toggle('hidden',!show);
+            if(show){
+                const who=a.callerName?' · started by '+a.callerName:'';
+                const label=(a.type==='video'?'📹':'📞')+' Call in progress'+who+' · '+a.count+' in call';
+                const text=document.getElementById('server-call-bar-text');text.innerText=label;text.title=label;
+                btn.disabled=!!callStartPending;btn.textContent=callStartPending?'Connecting…':'Join call';
+                syncServerCallPanelTop();
+            }
+            for(const [id,kind] of [['group-call-btn','voice'],['group-video-call-btn','video']]){
+                const el=document.getElementById(id);if(!el)continue;
+                const label=gcState?.groupId===groupId && groupId?'Return to server call':show?'Join active server call':'Start group '+kind+' call';
+                el.title=label;el.setAttribute('aria-label',label);
+            }
         }
         function joinActiveServerCall() {
-            const a = activeServerCall;
-            if (!a) return;
-            // Keep Join visible until the join succeeds (initGcState hides it).
-            joinGroupCallData({ groupId: a.groupId, groupName: a.groupName, callId: a.callId, type: a.type });
-        }
-        function dismissServerCallBar() {
-            if (activeServerCall) dismissedCallIds[activeServerCall.callId] = true;
-            document.getElementById('server-call-bar').classList.add('hidden');
+            const a=activeServerCall;
+            if(!a || !currentChatData?.isGroup || a.groupId!==currentChatData.groupId || impersonating)return;
+            return joinGroupCallData(a);
         }
 
         function declineGroupCall() {
@@ -7814,6 +7856,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             // Slash commands (servers only)
             if (!impersonating && currentChatData.isGroup && text.startsWith('/')) {
                 const cmdWord = text.slice(1).split(/\s+/)[0].toLowerCase();
+                if(lcRunAppCommand(text,currentChatData.groupId)){input.value='';hideMention();return;}
                 const adminCmds = ['ban','unban','banned','kick','mute','unmute','role','announce','insert'];
                 const everyoneCmds = ['help','me','shrug','roll'];
                 if (adminCmds.includes(cmdWord)) {
@@ -7968,7 +8011,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         function resolveMemberByName(groupId, name) {
             const sd = serverData[groupId] || {};
             const members = sd.members || {};
-            const target = (name || '').trim().toLowerCase();
+            const target = (name || '').trim().replace(/^@/,'').toLowerCase();
             if (!target) return null;
             // Real usernames take priority over aliases, even if another member has the same nickname.
             const ids = Object.keys(members);
@@ -8200,13 +8243,8 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             const gid=currentChatData?.isGroup?currentChatData.groupId:null;
             const isOwner=gid&&getMyRole(gid)==='owner';
             const mod=gid&&canServerModerate(gid);
-            const accessible=COMMANDS.filter(c=>{
-                const word=c.s.split(/[\s<]/)[0];
-                if(word==='/help')return true; if(['/me','/shrug','/roll'].includes(word))return !!gid&&lcCanBasicCommands(gid);
-                if(word==='/role')return !!isOwner;
-                return !!mod;
-            });
-            b.innerHTML = accessible.map(c => `<div class="cmd-item"><span class="cmd-syntax">${escapeHtml(c.s)}</span><div class="cmd-desc">${escapeHtml(c.d)}</div></div>`).join('');
+            const accessible=lcAvailableCommands(gid);
+            b.innerHTML = accessible.length?accessible.map(c => `<div class="cmd-item"><span class="cmd-syntax">${escapeHtml(c.s)}</span><div class="cmd-desc">${escapeHtml(c.d)}</div></div>`).join(''):'<p>You have no available commands in this server.</p>';
             const pop = document.getElementById('cmd-help');
             pop.classList.remove('hidden');
             pop.style.left = Math.max(10, (window.innerWidth - pop.offsetWidth) / 2) + 'px';
@@ -8272,7 +8310,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 let ph = 'Type a message...';
                 if (currentChatData && currentChatData.isGroup) {
                     const r = getMyRole(currentChatData.groupId);
-                    if (r === 'owner' || r === 'admin') ph = 'Message, or /help for commands';
+                    if (lcAvailableCommands(currentChatData.groupId).length) ph = 'Message, or /help for commands';
                 }
                 input.placeholder = ph;
             }
@@ -8329,19 +8367,21 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             }
             if (shown === 0) list.innerHTML = '<p style="font-size:13px;color:#7f8c8d;">No public servers with open spots right now.</p>';
         }
-        function joinPublicServer(groupId) {
-            db.ref('groups/' + groupId).once('value').then(snap => {
+        function joinPublicServer(groupId) {return lcServerEntry(groupId,()=>lcJoinPublicServerCore(groupId));}
+        function lcJoinPublicServerCore(groupId) {
+            return db.ref('groups/' + groupId).once('value').then(async snap => {
                 const sd = snap.val();
                 if (!sd) { showToast('Server no longer exists.'); return; }
                 if (!sd.public) { showToast('This server is no longer public.'); return; }
                 if (sd.banned && sd.banned[currentUser.uid]) { showToast('You are banned from this server.'); return; }
                 const count = Object.keys(sd.members || {}).length;
                 if (count >= MAX_SERVER_MEMBERS && !(sd.members || {})[currentUser.uid]) { showToast('That server is full.'); return; }
-                db.ref(`groups/${groupId}/members/${currentUser.uid}`).set({ role: 'peasant', username: myUsername });
-                db.ref(`userGroups/${currentUser.uid}/${groupId}`).set({ name: sd.name });
+                if(!sd.members?.[currentUser.uid])await db.ref(`groups/${groupId}/members/${currentUser.uid}`).set({ role: 'peasant', username: myUsername });
+                await db.ref(`userGroups/${currentUser.uid}/${groupId}`).set({ name: sd.name });
+                if(!sd.members?.[currentUser.uid]&&sd.installedApps?.welcome)lcAppRequest(groupId,'welcome','','welcome').catch(()=>{});
                 postSystem(groupId, '👋 ' + myUsername + ' joined the server', 'join');
                 showToast('Joined ' + (sd.name || 'server') + '!');
-            });
+            }).catch(e=>showToast('Could not join: '+e.message));
         }
 
         // ---- Transfer ownership ----
@@ -9958,7 +9998,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
         function cardBase(msg, emoji, kind) {
             const card = document.createElement('div'); card.className = 'poll-card'; card.style.background = msg.bgColor || '#6366f1';
-            const by = document.createElement('div'); by.className='poll-by';const who=document.createElement('span');who.className='msg-sender-label';who.dataset.sender=msg.sender||'';who.dataset.fallback=msg.senderName||'';who.textContent=displayNameFor(msg.sender,msg.senderName);by.append(document.createTextNode(emoji+' '+kind+' · '),who);
+            const by = document.createElement('div'); by.className='poll-by';const who=document.createElement('span');who.className='msg-sender-label';who.dataset.sender=msg.sender||'';who.dataset.fallback=msg.senderName||'';who.textContent=msg.botApp?msg.senderName:displayNameFor(msg.sender,msg.senderName);if(msg.botApp){delete who.dataset.sender;delete who.dataset.fallback;}by.append(document.createTextNode(emoji+' '+kind+' · '),who);
             card.appendChild(by);
             const q = document.createElement('div'); q.className = 'poll-q'; q.innerText = msg.question || ''; card.appendChild(q);
             return card;
@@ -10540,6 +10580,8 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         // are connected (Online, Idle, DND or Sleeping). Individual status dots
         // continue to distinguish those states. Never count disconnected users.
         function updateOnlineCount() {
+            // Existing Firebase presence / friend-list changes also refresh the Chess lobby.
+            window.lcChess?.queueFriendRefresh?.();
             const badge = document.getElementById('online-count-badge');
             if (!badge) return;
             const friends = Object.keys(myFriendsData || {}).filter(Boolean);
@@ -10621,6 +10663,8 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 setupPresence();
         });
         function closeMobileChat() {
+            const slash=document.getElementById('lc-slash-suggest');if(slash)slash.hidden=true;
+            ++lcRuleGateSeq;if(lcRuleDialog?.open)lcRuleDialog.close();
             if (currentChatData && firebaseReady) db.ref(`typing/${currentChatData.chatId}/${currentUser.uid}`).remove();
             adminServerOverrideGroupId = null;
             const adminBar = document.getElementById('admin-server-mode-bar'); if (adminBar) adminBar.classList.add('hidden');
@@ -10678,6 +10722,8 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
 
         function openChat(friendUid, originalUsername) {
+            const slash=document.getElementById('lc-slash-suggest');if(slash)slash.hidden=true;
+            ++lcRuleGateSeq;if(lcRuleDialog?.open)lcRuleDialog.close();
             if (blockedData && blockedData[friendUid]) {
                 showToast('Unblock this user before opening the chat.');
                 return;
@@ -10761,6 +10807,11 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
 
         function openGroupChat(groupId, groupName, adminOverride = false) {
+            if(adminOverride&&isAdminAccount())return lcOpenGroupChatCore(groupId,groupName,adminOverride);
+            return lcServerEntry(groupId,s=>{if(!s.members?.[currentUser.uid])throw Error('You are not a member.');return lcOpenGroupChatCore(groupId,groupName,adminOverride);});
+        }
+        function lcOpenGroupChatCore(groupId, groupName, adminOverride = false) {
+            const slash=document.getElementById('lc-slash-suggest');if(slash)slash.hidden=true;
             if (currentChatData && firebaseReady) db.ref(`typing/${currentChatData.chatId}/${currentUser.uid}`).remove();
             if (currentTypingRef) { currentTypingRef.off(); currentTypingRef = null; }
             cancelReplyOrEdit(); closeMessageSearch(); hideMention();
@@ -10791,7 +10842,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             setTimeout(() => {
                 if (currentChatData?.chatId === groupId) resetUnread(groupId, true);
             }, 40);
-            if (!impersonating) watchServerCall(groupId, groupName); // never join target calls
+            if (!impersonating) watchServerCall(groupId, groupName); else detachServerCallWatch(); // never join target calls
             attachPinsListener(groupId);
 
             detachChatListeners();
@@ -10862,6 +10913,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
 
         function renderMessage(msgKey, msg) {
+            if(msg?.botApp&&lcRenderAppMessage(msgKey,msg))return;
             // Hide messages from users you've blocked (your side only).
             if (msg && msg.sender && msg.sender !== currentUser.uid && blockedData && blockedData[msg.sender]) return;
             // Never draw an empty/broken message (the "undefined" phantom bug).
@@ -11127,6 +11179,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
 
         function updateMessageUI(msgKey, msg) {
+            if(msg?.botApp){currentMessages[msgKey]=msg;if(msg.type==='poll'){const h=document.getElementById('msg-wrapper-'+msgKey)?.querySelector('.interactive-holder');if(h){h.replaceChildren(buildInteractiveCard(msg,msgKey,true));}}lcRefreshBotButtons(currentChatData?.groupId);return;}
             const previousMessage=currentMessages[msgKey];
             currentMessages[msgKey] = msg; // remember latest state for receipt refreshes
 
@@ -20574,7 +20627,7 @@ function openFullDMBanner(src,person){
 function renderPanel(){const panel=$('lc-members-panel');if(!panel)return;panel.replaceChildren();if(!canView()||!currentChatData)return;
  if(currentChatData.isGroup){const s=serverData[currentChatData.groupId]||{},list=Object.entries(s.members||{}).sort((a,b)=>{const ao=typeof visibleStatus==='function'?visibleStatus(a[0])!=='offline':false,bo=typeof visibleStatus==='function'?visibleStatus(b[0])!=='offline':false;return Number(bo)-Number(ao)});
  const active=list.filter(([uid])=>typeof visibleStatus==='function'&&visibleStatus(uid)!=='offline');panel.append(created('h3','','Members — '+list.length));if(s.tag){const info=created('p','lc-member-info','Server tag: ['+s.tag+']');panel.append(info)};
- for(const [uid,m] of list)panel.append(memberRow(uid,m,true));
+ for(const [uid,m] of list)panel.append(memberRow(uid,m,true));lcAddBotMembers(panel,currentChatData.groupId);
  }else{const uid=currentChatData.uid;if(!uid)return;const p=profileCache[uid]||{};
  panel.append(created('h3','','Profile'));const hero=created('div','lc-dm-info');hero.append(memberRow(uid,{username:currentChatData.name},false));
   const banner=created('div','lc-dm-banner');banner.style.backgroundColor=/^#[0-9a-f]{6}$/i.test(String(p.bannerColor||''))?p.bannerColor:'#5865f2';
@@ -20660,7 +20713,7 @@ function showAtSuggestions(){
  if(currentChatData.isGroup){
    const sd=serverData[currentChatData.groupId]||{};
    opts=['everyone','admins','admin','peasants','peasant','owners','owner'].map(name=>({name,desc:name==='everyone'?'Notify all server members':'Mention '+name}));
-   opts.push(...Object.values(sd.members||{}).map(x=>({name:String(x.username||''),desc:'Member'})).filter(x=>x.name));
+   opts.push(...Object.values(sd.members||{}).map(x=>({name:String(x.username||''),desc:'Member'})).filter(x=>x.name));opts.push(...lcInstalled(currentChatData.groupId).map(([id,a])=>({name:a.name.replace(/[^a-zA-Z0-9_]/g,''),desc:'App · '+a.name})));
  }else{
    const uid=currentChatData.uid;const name=String(myFriendsData?.[uid]||userNameCache?.[uid]||'');if(name)opts=[{name,desc:'Direct message'}];
  }
@@ -20674,7 +20727,7 @@ function pickAt(i){const input=$('message-input'),box=$('lc-at-suggest');if(!inp
 }
 function wireAtSuggestions(){const input=$('message-input');if(!input||$('lc-at-suggest'))return;const box=created('div','lc-at-suggest');box.id='lc-at-suggest';box.hidden=true;input.parentElement?.append(box);
  input.addEventListener('input',showAtSuggestions);
- input.addEventListener('keydown',e=>{if(box.hidden||!atSuggestions.length)return;
+ input.addEventListener('keydown',e=>{if(document.getElementById('lc-slash-suggest')&&!document.getElementById('lc-slash-suggest').hidden)return;if(box.hidden||!atSuggestions.length)return;
  if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();box.hidden=true}
  if(e.key==='Tab'||(e.key==='Enter'&&!e.shiftKey)){e.preventDefault();e.stopImmediatePropagation();pickAt(atIndex)}
  if(e.key==='ArrowDown'){e.preventDefault();e.stopImmediatePropagation();atIndex=(atIndex+1)%atSuggestions.length}
@@ -21112,7 +21165,7 @@ setInterval(observe,1700);
 .lc-chess-result{background:#856635}.lc-chess-result small{display:block;font-size:12px;font-weight:400;margin-top:4px}
 .lc-chess-moves{padding:9px;background:#0e1626;min-height:75px;max-height:190px;overflow:auto;border-radius:9px;color:#e2e6f4;font:12px/1.9 ui-monospace,monospace}
 .lc-chess-moves span{display:inline-block;margin-right:5px;white-space:nowrap}
-.lc-chess-invite{position:fixed;inset:0;z-index:5000;display:grid;place-items:center;padding:20px;background:#030917b9;animation:lcChessFade .25s ease-out}
+.lc-chess-invite{position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;padding:20px;background:#030917b9;animation:lcChessFade .25s ease-out;box-sizing:border-box;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;overflow:auto;color:white}.lc-chess-invite::backdrop{background:transparent}.lc-chess-invite:not([open]){display:none}.lc-chess-invite.lc-invite-fallback{display:grid}
 .lc-chess-invite-card{background:linear-gradient(145deg,#242e49,#161b2d);border:2px solid #efc571;color:#fff;padding:28px 25px 25px;border-radius:20px;box-shadow:0 0 0 7px #f1c76c24,0 25px 70px #000b,0 0 70px #f0cd7d42;max-width:430px;width:min(100%,430px);text-align:center;animation:lcChessPop .5s cubic-bezier(.16,1.6,.4,1)}
 .lc-chess-invite-emblem{font-size:68px;animation:lcChessBounce 1.4s ease-in-out infinite alternate;text-shadow:0 0 35px #f2d483}
 .lc-chess-invite h2{margin:3px 0;font-size:25px;color:#ffe4a8}.lc-chess-invite p{font-size:15px;line-height:1.5}.lc-chess-duel-clock{background:#101b31;border-radius:10px;padding:10px;margin:15px 0;color:#f3dd9c}
@@ -21430,7 +21483,7 @@ function lcMakeChessCore(){
 
  const pieceName={k:'king',q:'queen',r:'rook',b:'bishop',n:'knight',p:'pawn'};
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const state={stage:null,root:null,game:null,selected:-1,lastId:'',home:null,homeUid:null,lastHome:0,lastRender:'',gameTimer:null,clockTimer:null,bgBusy:false,matchBusy:false,pendingInvite:'',inviteBusy:false,awaitingInvite:null,serverOffset:0,closed:false,friendElos:{},friendRatings:{},ratingsUid:null,historyItems:[],historyNextOffset:0,historyLoaded:false,historyBusy:false,hint:null,hintBusy:false,hintRequest:0,signalPending:false,signalRef:null,signalCallback:null,signalUid:null,autoOpeningInvite:false,autoBot:false,autoBotBusy:false,autoBotEpoch:0,autoBest:false,autoBestBusy:false,autoBestThinking:false,autoBestEpoch:0,autoBestMatchId:"",adminBothLaunching:false,moveBusy:false,visibilityWired:false};
+ const state={stage:null,root:null,game:null,selected:-1,lastId:'',home:null,homeUid:null,lastHome:0,lastRender:'',gameTimer:null,clockTimer:null,bgBusy:false,matchBusy:false,pendingInvite:'',inviteBusy:false,inviteRef:null,inviteCallback:null,inviteUid:null,inviteLive:false,inviteRows:[],inviteExpiry:null,handledInvites:new Set(),awaitingInvite:null,serverOffset:0,closed:false,friendElos:{},friendRatings:{},ratingsUid:null,historyItems:[],historyNextOffset:0,historyLoaded:false,historyBusy:false,hint:null,hintBusy:false,hintRequest:0,signalPending:false,signalRef:null,signalCallback:null,signalUid:null,autoOpeningInvite:false,autoBot:false,autoBotBusy:false,autoBotEpoch:0,autoBest:false,autoBestBusy:false,autoBestThinking:false,autoBestEpoch:0,autoBestMatchId:"",adminBothLaunching:false,moveBusy:false,visibilityWired:false};
  
  
  
@@ -21792,6 +21845,60 @@ function lcMakeChessCore(){
    }finally{lcSfBotBusy=false;scheduleAutoBest();}
  }
  function friendReady(id){const status=typeof visibleStatus==='function'?visibleStatus(id):'offline';return status==='online'||status==='idle';}
+ // Update only the lobby's friend rows; keep open ratings, selections, scroll,
+ // and the active chessboard intact. Reuse the existing LiveChat listeners.
+ let friendRefreshQueued=false;
+ function queueFriendRefresh(){
+   if(friendRefreshQueued||!state.root?.querySelector('.lc-chess-friends'))return;
+   friendRefreshQueued=true;
+   Promise.resolve().then(()=>{friendRefreshQueued=false;refreshChessFriends();});
+ }
+ function refreshChessFriends(){
+   const list=state.root?.querySelector('.lc-chess-friends');
+   if(!list||state.game||state.loadingMatch||state.menuUid!==uid()||loginAsChess()||!chessSessionReady())return;
+   const friends=(typeof myFriendsData!=='undefined'&&myFriendsData)||{};
+   const blocked=(typeof blockedData!=='undefined'&&blockedData)||{};
+   const people=Object.entries(friends).filter(([id])=>id!==uid()&&!blocked[id]);
+   const wanted=new Set(people.map(([id])=>id));
+   const rows=new Map(Array.from(list.querySelectorAll('[data-chess-friend-row]'),el=>[el.dataset.chessFriendRow,el]));
+   for(const [id,row] of rows)if(!wanted.has(id))row.remove();
+   const empty=list.querySelector('.lc-chess-empty-friends');
+   if(!people.length){
+     if(!empty){const note=document.createElement('div');note.className='lc-chess-hint lc-chess-empty-friends';note.textContent='Add friends in LiveChat to send challenges.';list.append(note);}
+     return;
+   }
+   empty?.remove();
+   for(const [id,name] of people){
+     let row=rows.get(id);
+     if(!row){
+       row=document.createElement('div');row.className='lc-chess-person';row.dataset.chessFriendRow=id;
+       row.innerHTML='<span><button type="button" class="lc-chess-friend-name" aria-expanded="false"></button><small class="lc-chess-friend-online"></small><small class="lc-chess-friend-rating" hidden></small></span><button type="button" class="lc-chess-challenge-button"></button>';
+       const rating=row.querySelector('.lc-chess-friend-name'),target=row.querySelector('.lc-chess-friend-rating'),button=row.querySelector('.lc-chess-challenge-button');
+       rating.dataset.friendRating=id;target.dataset.ratingOutput=id;button.dataset.friend=id;
+       button.onclick=()=>challenge(id);
+       rating.onclick=async()=>{
+         const opening=target.hidden;target.hidden=!opening;rating.setAttribute('aria-expanded',String(opening));
+         if(!opening)return;
+         target.textContent='Loading Elo…';
+         const owner=uid();
+         try{const f=await loadFriendRating(id);if(!target.isConnected||uid()!==owner)return;
+           const delta=Number(f?.lastChange||0);
+           target.textContent=f?`Elo ${f.elo} · Last game ${delta>0?'+':''}${delta} pts`:'Elo N/A · Placement not completed';
+         }catch(e){if(target.isConnected&&uid()===owner)target.textContent='Rating unavailable — '+String(e.message||e).slice(0,90);}
+       };
+       list.append(row);
+     }
+     const label='♟ '+((typeof myNicknamesData!=='undefined'&&myNicknamesData[id])||name||'Friend')+' ▾';
+     const rating=row.querySelector('.lc-chess-friend-name');if(rating.textContent!==label)rating.textContent=label;
+     const status=visibleStatus(id),ready=friendReady(id);
+     const text=({online:'🟢 Online',idle:'🟡 Idle',dnd:'🔴 Do Not Disturb',sleep:'🌙 Sleeping'})[status]||'⚫ Offline';
+     const statusEl=row.querySelector('.lc-chess-friend-online');if(statusEl.textContent!==text)statusEl.textContent=text;
+     const button=row.querySelector('.lc-chess-challenge-button');
+     const caption=ready?'Challenge →':status==='offline'?'Offline':'Unavailable';
+     if(button.textContent!==caption)button.textContent=caption;
+     button.disabled=!ready;button.title=ready?'':'Friend must be online or idle';
+   }
+ }
  function colorSelect(id){return `<label class="lc-chess-color-label" for="${id}">Your pieces <select id="${id}" class="lc-chess-color-select"><option value="random">🎲 Random</option><option value="white">⚪ White</option><option value="black">⚫ Black</option></select></label>`;}
  const toast=msg=>{if(typeof showToast==='function')showToast(msg);else alert(msg)};
  function uid(){try{return currentUser?.uid||null}catch(e){return null}}
@@ -21887,7 +21994,7 @@ function lcMakeChessCore(){
      if(h.rating&&Number.isFinite(Number(h.rating.lastChange)))state.lastRating=h.rating;
      try{localStorage.setItem('lc:chessPlaced:'+(uid()||'guest'),JSON.stringify({placed:!!h.rating,updated:Date.now()}));}catch(e){}
      if(state.ratingsUid!==tokenUid){state.friendRatings={};state.friendElos={};state.ratingsUid=tokenUid;state.historyItems=[];state.historyLoaded=false;state.historyNextOffset=0;}
-     showInvite(h.invites||[]);
+     showPolledInvites(h.invites||[]);
       const pending=awaitingChallenge();const accepted=pending&&(h.games||[]).find(g=>g.inviteId===pending.id&&g.status==='active');if(accepted)openAcceptedChessMatch(accepted);
       if(state.stage&&!state.game&&!state.loadingMatch&&refresh)drawMenu();
    }catch(e){
@@ -21895,33 +22002,65 @@ function lcMakeChessCore(){
      if(state.stage&&!state.game&&refresh)showError(e.message);
    }finally{state.bgBusy=false;}
  }
+ function clearInvitePopup(){
+   clearTimeout(state.inviteExpiry);state.inviteExpiry=null;
+   const el=document.getElementById('lc-chess-invite');if(el){if(el.open&&typeof el.close==='function')el.close();el.remove();}state.pendingInvite='';
+ }
+ function showPolledInvites(invites){showInvite(state.inviteLive?state.inviteRows:invites);}
  function showInvite(invites){
+   if(!chessSessionReady()||loginAsChess()||(typeof appPrefs!=='undefined'&&appPrefs.allowChessChallenges===false)){clearInvitePopup();return;}
+   const incoming=invites.filter(x=>x&&x.to===uid()&&x.expires>Date.now()&&!state.handledInvites.has(x.id)).sort((a,b)=>b.createdAt-a.createdAt)[0];
+   if(!incoming){clearInvitePopup();return;}
    const existing=document.getElementById('lc-chess-invite');
-   if(typeof appPrefs!=='undefined'&&appPrefs.allowChessChallenges===false){existing?.remove();state.pendingInvite='';return;}
-   const incoming=invites.filter(x=>x&&x.to===uid()&&x.expires>Date.now()).sort((a,b)=>b.createdAt-a.createdAt)[0];
-   if(!incoming){existing?.remove();state.pendingInvite='';return;}
    if(state.pendingInvite===incoming.id&&existing)return;
-   state.pendingInvite=incoming.id;existing?.remove();
-   const el=document.createElement('div');el.id='lc-chess-invite';el.className='lc-chess-invite';el.setAttribute('role','alertdialog');
-   el.innerHTML=`<div class="lc-chess-invite-card"><div class="lc-chess-invite-emblem">♞</div><h2>CHESS CHALLENGE!</h2><p><b>${esc(incoming.fromName||'A friend')}</b> wants a 1v1 duel with you.</p><div class="lc-chess-duel-clock">⏱ 10:00 each · Rated duel</div><div class="lc-chess-row"><button class="lc-chess-accept">⚔ Accept Duel</button><button class="lc-chess-decline">Decline</button></div><small>Challenge expires in 5 minutes</small></div>`;
+   clearInvitePopup();state.pendingInvite=incoming.id;
+   const el=document.createElement('dialog');el.id='lc-chess-invite';el.className='lc-chess-invite';el.setAttribute('aria-labelledby','lc-chess-invite-title');
+   el.innerHTML=`<div class="lc-chess-invite-card"><div class="lc-chess-invite-emblem">♞</div><h2 id="lc-chess-invite-title">CHESS CHALLENGE!</h2><p><b>${esc(incoming.fromName||'A friend')}</b> wants a 1v1 duel with you.</p><div class="lc-chess-duel-clock">⏱ 10:00 each · Rated duel</div><div class="lc-chess-row"><button class="lc-chess-accept">⚔ Accept Duel</button><button class="lc-chess-decline">Decline</button></div><small>Challenge expires in 5 minutes</small><p class="lc-chess-invite-error" role="status" hidden></p></div>`;
    el.querySelector('.lc-chess-accept').onclick=()=>respond(incoming.id,true);
    el.querySelector('.lc-chess-decline').onclick=()=>respond(incoming.id,false);
-   document.body.appendChild(el);
+   el.addEventListener('cancel',e=>e.preventDefault());
+   // Native dialog enters the top layer, above the game and other overlays.
+   // If showModal is unavailable, keep the overlay inside the fullscreen element.
+   (document.fullscreenElement?.id==='game-stage'?document.fullscreenElement:document.body).appendChild(el);
+   try{el.showModal();}catch(_){el.classList.add('lc-invite-fallback');el.setAttribute('open','');}
+   state.inviteExpiry=setTimeout(()=>showPolledInvites(invites),Math.max(1,incoming.expires-Date.now()+10));
  }
+ function unbindChessInvites(){
+   if(state.inviteRef&&state.inviteCallback){try{state.inviteRef.off('value',state.inviteCallback);}catch(_){}}
+   state.inviteRef=null;state.inviteCallback=null;state.inviteUid=null;state.inviteLive=false;state.inviteRows=[];state.handledInvites.clear();clearInvitePopup();
+ }
+ function bindChessInvites(){
+   const owner=uid();if(!chessSessionReady()||loginAsChess()||typeof db==='undefined'||!db?.ref)return;
+   if(state.inviteRef&&state.inviteUid===owner)return;
+   unbindChessInvites();const ref=db.ref('chess/invites/'+owner);
+   const callback=snap=>{if(uid()!==owner||state.inviteRef!==ref)return;state.inviteLive=true;state.inviteRows=Object.values(snap.val()||{});showInvite(state.inviteRows);};
+   const onError=()=>{if(state.inviteRef===ref){state.inviteLive=false;state.inviteRows=[];}};
+   state.inviteRef=ref;state.inviteUid=owner;state.inviteCallback=callback;
+   try{ref.on('value',callback,onError);}catch(_){onError();}
+ }
+ document.addEventListener('fullscreenchange',()=>{
+   const el=document.getElementById('lc-chess-invite');if(!el)return;
+   const parent=document.fullscreenElement?.id==='game-stage'?document.fullscreenElement:document.body;
+   if(el.parentNode!==parent){if(el.open&&typeof el.close==='function')el.close();parent.appendChild(el);try{el.showModal();}catch(_){el.classList.add('lc-invite-fallback');el.setAttribute('open','');}}
+ });
  async function respond(id,accept){if(state.inviteBusy)return;
-   if(accept&&isActive()){toast('Finish or resign your current chess game before accepting another challenge.');return;}
+   const owner=uid(),el=document.getElementById('lc-chess-invite');
+   const error=el?.querySelector('.lc-chess-invite-error');const fail=msg=>{if(error&&el.isConnected){error.hidden=false;error.textContent=msg;}else toast(msg);};
+   if(accept&&isActive()){fail('Finish or resign your current chess game before accepting another challenge.');return;}
    state.inviteBusy=true;
-   const btn=document.querySelector('#lc-chess-invite .lc-chess-accept');if(btn)btn.disabled=true;
-   try{const d=await api('/respond',{id,accept});document.getElementById('lc-chess-invite')?.remove();state.pendingInvite='';
+   const buttons=el?.querySelectorAll('button')||[];buttons.forEach(b=>b.disabled=true);
+   try{const d=await api('/respond',{id,accept});if(uid()!==owner)return;state.handledInvites.add(id);if(state.pendingInvite===id)clearInvitePopup();
      if(accept&&d.id){openGameOverlay();if(state.stage)await loadMatch(d.id);}else toast('Challenge declined.');
-     await home(false);
-   }catch(e){toast(e.message);}finally{state.inviteBusy=false;}
+     await home(false);if(state.inviteLive)showInvite(state.inviteRows);
+   }catch(e){if(uid()===owner)fail(e.message);}finally{state.inviteBusy=false;buttons.forEach(b=>b.disabled=false);}
  }
  function openGameOverlay(){
    // The existing game must not be silently dropped when accepting a duel.
    if(isActive()){
      toast('Finish or resign your current game before accepting another challenge.');return;
    }
+   // Accepting while already in the Chess lobby must preserve its mounted stage.
+   if(state.stage&&state.root?.isConnected&&document.getElementById('game-player')?.classList.contains('show'))return;
    if(document.getElementById('game-player')?.classList.contains('show')&&typeof window.closeGame==='function')window.closeGame(true);
    const player=document.getElementById('game-player'),stage=document.getElementById('game-stage');
    if(!player||!stage){toast('Games player not found.');return;}
@@ -22028,15 +22167,15 @@ function lcMakeChessCore(){
    root.innerHTML='<div class="lc-chess-loading">♟ Loading Chess Arena…</div>';
    // Websocket push updates the opponent quickly; 15-second poll is a
    // heartbeat / recovery path, not the primary move transport.
-   let pollTick=0;state.gameTimer=setInterval(()=>{pollTick++;if(state.stage&&state.game&&!state.game.localOnly&&state.game.status==='active'&&!state.matchBusy&&!state.moveBusy&&!document.hidden&&(state.game.mode==='friend'||pollTick%3===0))refreshMatch()},6000);
-   if(!loginAsChess())bindChessMoveSignal();
+   let pollTick=0;state.gameTimer=setInterval(()=>{pollTick++;refreshChessFriends();if(state.stage&&state.game&&!state.game.localOnly&&state.game.status==='active'&&!state.matchBusy&&!state.moveBusy&&!document.hidden&&(state.game.mode==='friend'||pollTick%3===0))refreshMatch()},6000);
+   if(!loginAsChess()){bindChessMoveSignal();bindChessInvites();}
    state.clockTimer=setInterval(updateClockLabels,250);
    // Safari/iOS may pause Firebase connections when backgrounded. Check once on
    // return rather than leaving a stale board until the fallback poll fires.
    if(!state.visibilityWired){
      state.visibilityWired=true;
      document.addEventListener('visibilitychange',()=>{
-       if(!document.hidden&&state.stage&&state.game&&!state.game.localOnly&&!state.moveBusy)refreshMatch();
+       if(!document.hidden){refreshChessFriends();if(state.stage&&state.game&&!state.game.localOnly&&!state.moveBusy)refreshMatch();}
      });
    }
    if(loginAsChess()){drawLoginAsChessMenu();return;}
@@ -22057,8 +22196,8 @@ function lcMakeChessCore(){
    state.root.querySelector('#lc-chess-menu').onclick=()=>{state.game=null;state.lastId='';drawMenu();};}
  function drawMenu(){if(!state.root||state.game||state.loadingMatch)return;
    const historyWasOpen=!!state.root.querySelector('#lc-chess-history-details')?.open;
-   const h=state.home||{},r=h.rating,unplaced=!r;const games=(h.games||[]),friends=(typeof myFriendsData!=='undefined'&&myFriendsData)||{};
-   const people=Object.entries(friends).filter(([id])=>id!==uid()&&!((typeof blockedData!=='undefined'&&blockedData)||{})[id]);
+   const h=state.home||{},r=h.rating,unplaced=!r;const games=(h.games||[]);
+   state.menuUid=uid();
    state.root.innerHTML=`<div class="lc-chess-hub">
      <header class="lc-chess-hero"><div><div class="lc-chess-kicker">LIVECHAT GAMES</div><h2>♟ Chess Arena</h2><p>Real chess · Friends · Ten bots · 10-minute clocks</p></div><div class="lc-chess-rating"><small>YOUR BOT ELO</small><strong>${r?Number(r.elo):'N/A'}</strong><span>${r?`${r.games||0} bot games`:'Take the placement challenge'}</span>${r?`<div class="lc-chess-elo-change ${Number(r.lastChange||0)>0?'up':Number(r.lastChange||0)<0?'down':'flat'}" title="Elo gained or lost on your last rated game">${Number(r.lastChange||0)>0?'▲ +':Number(r.lastChange||0)<0?'▼ ':'• '}${Number(r.lastChange||0)} <small>points last game</small></div>`:''}</div></header>
      ${h.canResetAll?`<details class="lc-chess-admin-tools" style="margin:18px 0;padding:14px;border:1px solid #b9893e;border-radius:12px;background:rgba(213,158,64,.08)">
@@ -22084,7 +22223,7 @@ function lcMakeChessCore(){
      <section><h3>🤖 Play 1v1 vs a bot ${unplaced?'🔒':''}</h3>
        ${unplaced?'<p class="lc-chess-locked" role="status">🔒 Bot matches are LOCKED until you finish your placement test above. Choose any difficulty for the placement, then unlock all 10 bots!</p>':'<p class="lc-chess-hint">All 10 bots unlocked! Stockfish 19 powers these bots on your Chromebook. Upload both .js and .wasm engine files to GitHub Pages first. Higher-rated bots offer greater Elo rewards.</p>'}
        ${colorSelect('lc-chess-bot-color')}<div class="lc-chess-bots">${BOTS.map((b,i)=>`<button type="button" class="lc-chess-bot" data-level="${i+1}" ${unplaced?'disabled aria-label="Locked: complete your placement test first"':''}><span>⚔ Level ${i+1}</span><b>${esc(b.name)}</b><small>Bot Elo ${b.elo}</small></button>`).join('')}</div></section>
-     <section><h3>⚔ Challenge a friend · 10+0</h3><p class="lc-chess-hint">Click a friend's username to reveal their Elo. Ratings aren't loaded until you click. Friend matches are rated, with 10-minute clocks and a short activity timeout.</p><div class="lc-chess-friends">${people.length?people.map(([id,name])=>`<div class="lc-chess-person"><span><button type="button" class="lc-chess-friend-name" data-friend-rating="${esc(id)}" aria-expanded="false">♟ ${esc((typeof myNicknamesData!=='undefined'&&myNicknamesData[id])||name||'Friend')} ▾</button><small class="lc-chess-friend-online">${friendReady(id)?'🟢 Online / idle':'⚫ Offline'}</small><small class="lc-chess-friend-rating" data-rating-output="${esc(id)}" hidden></small></span><button type="button" class="lc-chess-challenge-button" data-friend="${esc(id)}" ${friendReady(id)?'':'disabled title="Friend must be online or idle"'}>${friendReady(id)?'Challenge →':'Offline'}</button></div>`).join(''):'<div class="lc-chess-hint">Add friends in LiveChat to send challenges.</div>'}</div></section>
+     <section><h3>⚔ Challenge a friend · 10+0</h3><p class="lc-chess-hint">Click a friend's username to reveal their Elo. Ratings aren't loaded until you click. Friend matches are rated, with 10-minute clocks and a short activity timeout.</p><div class="lc-chess-friends"></div></section>
      <section><details id="lc-chess-history-details" class="lc-chess-history-details"><summary>🕘 Game History <small>Click to load your past games</small></summary><div id="lc-chess-history-items" class="lc-chess-history"><p class="lc-chess-hint">Game history is private and only loads when you open it.</p></div><button type="button" id="lc-chess-history-more" class="lc-chess-primary" hidden>Load more games</button></details>${games.length?`<div class="lc-chess-current-matches"><p class="lc-chess-hint">In-progress games</p>${games.map(g=>`<button type="button" class="lc-chess-history-item" data-match="${esc(g.id)}">Resume ${g.mode==='bot'?'bot':'friend'} match →</button>`).join('')}</div>`:''}</section>
      <footer class="lc-chess-foot">Stockfish 19 Lite runs in your browser. Elo labels are difficulty estimates, not measured ratings, especially below 1320. The server verifies moves and rating updates, but a browser-supplied engine move is not cheat-proof. Move-quality rating is approximate. Friend-duel wins earn Elo; losses and resignations can cost Elo. Admins can use local Stockfish hints in bot games and friend duels; rated games still award Elo.</footer>
    </div>`;
@@ -22097,18 +22236,7 @@ function lcMakeChessCore(){
    const placementStart=state.root.querySelector('#lc-chess-start-placement');
    if(placementStart)placementStart.onclick=()=>startBot(Number(state.root.querySelector('#lc-chess-placement-level')?.value||3),true,state.root.querySelector('#lc-chess-placement-color')?.value||'random');
    state.root.querySelectorAll('[data-level]:not(:disabled)').forEach(el=>el.onclick=()=>startBot(Number(el.dataset.level),false,state.root.querySelector('#lc-chess-bot-color')?.value||'random'));
-   state.root.querySelectorAll('[data-friend]').forEach(el=>el.onclick=()=>challenge(el.dataset.friend));
-   state.root.querySelectorAll('[data-friend-rating]').forEach(el=>el.onclick=async()=>{
-     const id=el.dataset.friendRating,target=state.root?.querySelector('[data-rating-output="'+id+'"]');
-     if(!target)return;
-     const opening=target.hidden;target.hidden=!opening;el.setAttribute('aria-expanded',String(opening));
-     if(!opening)return;
-     target.textContent='Loading Elo…';
-     try{const f=await loadFriendRating(id);if(!target.isConnected)return;
-       const delta=Number(f?.lastChange||0);
-       target.textContent=f?`Elo ${f.elo} · Last game ${delta>0?'+':''}${delta} pts`:'Elo N/A · Placement not completed';
-     }catch(e){target.textContent='Rating unavailable — '+String(e.message||e).slice(0,90);}
-   });
+   refreshChessFriends();
    const details=state.root.querySelector('#lc-chess-history-details');
    if(details){details.ontoggle=()=>{if(details.open&&!state.historyLoaded)loadHistoryPage(0);};
      state.root.querySelector('#lc-chess-history-more').onclick=()=>loadHistoryPage(state.historyNextOffset);
@@ -22579,7 +22707,7 @@ function lcMakeChessCore(){
  async function notifications(){
    if(notifyBusy||state.bgBusy)return;notifyBusy=true;
    const before=uid();
-   try{const wait=awaitingChallenge();const d=await api('/notifications'+(wait?'?awaiting='+encodeURIComponent(wait.id):''));if(uid()===before){showInvite(d.invites||[]);if(d.accepted)openAcceptedChessMatch(d.accepted);}}
+   try{const wait=awaitingChallenge();const d=await api('/notifications'+(wait?'?awaiting='+encodeURIComponent(wait.id):''));if(uid()===before){showPolledInvites(d.invites||[]);if(d.accepted)openAcceptedChessMatch(d.accepted);}}
    catch(e){}finally{notifyBusy=false;}
  }
  function backgroundTick(){
@@ -22589,9 +22717,11 @@ function lcMakeChessCore(){
    // event; do not query the Worker or disturb the chess screen.
    if(!chessSessionReady()){
      if(!uid()||(state.signalUid&&state.signalUid!==uid()))unbindChessMoveSignal();
+     if(!uid()||state.inviteUid!==uid()||loginAsChess())unbindChessInvites();else clearInvitePopup();
      return;
    }
-   bindChessMoveSignal();
+   bindChessMoveSignal();bindChessInvites();
+   if(state.inviteLive)showInvite(state.inviteRows);
    if(document.hidden)return;
    if(awaitingChallenge()){notifications();return;}
    if(!state.home||Date.now()-state.lastHome>(state.stage&&!state.game?60000:180000)){home(!!state.stage&&!state.game);return;}
@@ -22599,10 +22729,10 @@ function lcMakeChessCore(){
  }
  setInterval(backgroundTick,8000);
  try{auth.onAuthStateChanged(user=>{
-   if(!user){unbindChessMoveSignal();return;}
-   setTimeout(()=>{if(chessSessionReady())bindChessMoveSignal();},100);
+   if(!user){unbindChessMoveSignal();unbindChessInvites();return;}
+   setTimeout(()=>{if(chessSessionReady()){bindChessMoveSignal();bindChessInvites();}},100);
  });}catch(_){}
- window.lcChess={open(stage){mount(stage);return cleanup;},close:cleanup,isActive,leaveAndClose:()=>leaveGame(true),minimize:minimizeChess,restore:restoreChess,openOverlay:openGameOverlay,eloText,refreshFriends:updateFriendElo,loadFriendRating,refresh:home};
+ window.lcChess={open(stage){mount(stage);return cleanup;},close:cleanup,isActive,leaveAndClose:()=>leaveGame(true),minimize:minimizeChess,restore:restoreChess,openOverlay:openGameOverlay,eloText,refreshFriends:updateFriendElo,queueFriendRefresh,loadFriendRating,refresh:home};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(backgroundTick,3000),{once:true});else setTimeout(backgroundTick,3000);
 })();
 
@@ -24138,5 +24268,84 @@ try{auth.onAuthStateChanged(()=>setTimeout(tick,1400))}catch(_){}
 #chat-area:has(#msg-search-bar:not(.hidden)) :is(#messages,#chat-input-area,#typing-indicator,#reply-bar,#mute-banner,#input-area,#message-input-area,#message-input-container,.msg-composer){margin-right:0!important}
 #chat-area #messages{min-height:0}#chat-area #msg-search-all-results:not(.hidden){position:relative;z-index:89;flex:0 1 auto;min-height:0;pointer-events:auto}
 </style>
+<style>
+.settings-tabbar{flex-wrap:wrap}.settings-tabbar button{min-width:72px}#settings-rules-pane textarea{width:100%;box-sizing:border-box;resize:vertical}#settings-rules-pane label{display:flex;gap:8px;align-items:center;font-size:13px;margin:8px 0}#settings-rules-pane label input{width:auto!important}
+.lc-app-dialog{width:min(540px,92vw);max-height:86vh;overflow:auto;box-sizing:border-box;background:var(--card,#fff);color:var(--ink,#202331);border:1px solid #7775;border-radius:16px;padding:22px;box-shadow:0 18px 65px #0006}.lc-app-dialog::backdrop{background:#0009}.dark .lc-app-dialog{background:#202332;color:#f2f3fa}.lc-app-dialog button,.lc-app-card button,#settings-rules-pane button,.lc-reveal-answer{border:0;border-radius:7px;padding:8px 12px;background:#5865f2;color:white;cursor:pointer}.lc-app-dialog button:disabled,.lc-reveal-answer:disabled{opacity:.5}.lc-app-list{display:grid;gap:9px;max-height:52vh;overflow:auto}.lc-app-card{padding:10px;border:1px solid #8885;border-radius:9px;margin:6px 0}.lc-app-card p{font-size:13px;margin:5px 0}.lc-app-card small{display:block;margin:5px 0;overflow-wrap:anywhere}.lc-app-actions{display:flex;gap:8px;justify-content:flex-end}.lc-rules-body{white-space:pre-wrap;overflow-wrap:anywhere;max-height:55vh;overflow:auto;padding:10px;background:#8881;border-radius:8px;margin:12px 0}.lc-app-member{display:flex;gap:7px;align-items:center;font-size:13px;padding:7px}.lc-app-tag{font-size:10px;background:#5865f2;color:#fff;border-radius:4px;padding:2px 4px}.lc-app-message{display:flex;align-items:flex-start;gap:8px}.lc-app-message .lc-app-avatar{display:grid;place-items:center;background:#5865f240;flex-shrink:0}.lc-app-message-content{max-width:85%;min-width:0}.lc-app-message-header{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px}.lc-app-message-text{white-space:pre-wrap;overflow-wrap:anywhere;padding:8px 0}.lc-app-message-content small{opacity:.75;font-size:10px}.lc-at-choice.active{background:#5865f2;color:white}#lc-slash-suggest{z-index:220}
+</style><script>
+// Server rules and app catalog. Actual bot commands and answers run in the Worker.
+const LC_SERVER_APPS = {
+ truth:{name:'Truth or Dare',icon:'🎲',commands:['truth-or-dare'],desc:'Choose a truth, dare or random challenge.'},
+ joke:{name:'Joke Bot',icon:'😂',commands:['joke'],desc:'A fresh joke or pun.'},
+ trivia:{name:'Trivia',icon:'🧠',commands:['trivia','answer','trivia-leaderboard'],desc:'Answer questions and earn points.'},
+ would:{name:'Would You Rather',icon:'🤔',commands:['would-you-rather'],desc:'Choose between two scenarios.'},
+ riddle:{name:'Riddle Bot',icon:'🧩',commands:['riddle'],desc:'Solve a riddle together.'},
+ random:{name:'Randomizer',icon:'🎰',commands:['roll','coinflip','pick'],desc:'Roll dice, flip a coin or pick a member.'},
+ poll:{name:'Poll Bot',icon:'📊',commands:['poll'],desc:'Create a poll: /poll question | choice | choice.'},
+ level:{name:'Level Bot',icon:'💯',commands:['rank','leaderboard'],desc:'Persistent chat XP and levels (10 XP per eligible message, 30-second earning cooldown).'},
+ pet:{name:'Pet Bot',icon:'🐾',commands:['pet'],desc:'Adopt, feed and check on your virtual pet.'},
+ duel:{name:'Duel Bot',icon:'⚔️',commands:['duel'],desc:'Challenge a member to a friendly luck duel.'},
+ qotd:{name:'Question of the Day',icon:'💬',commands:['qotd'],desc:'Daily conversation starters, plus manual /qotd.'},
+ welcome:{name:'Welcome Bot',icon:'👋',commands:['welcome'],desc:'Welcome new members or display the welcome message.'}
+};
+function lcCanManageApps(gid){const s=serverData[gid]||{},uid=currentUser?.uid,m=s.members?.[uid];return !impersonating&&!!uid&&(s.owner===uid||m?.role==='admin'||(!!m&&s.roleDefinitions?.[m.customRole]?.canManageApps===true));}
+function lcRulesOwner(gid){return !impersonating&&serverData[gid]?.owner===currentUser?.uid;}
+function lcInstalled(gid){return Object.entries(LC_SERVER_APPS).filter(([id])=>serverData[gid]?.installedApps?.[id]===true);}
+function lcAppNode(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
+function lcAppBtn(text,fn){const e=lcAppNode('button',text);e.type='button';e.onclick=fn;return e;}
+function lcAppDialog(title){const dialog=lcAppNode('dialog',undefined,'lc-app-dialog');dialog.append(lcAppNode('h3',title));document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});return dialog;}
+const lcAppPending=new Set();
+async function lcAppRequest(gid,command,args='',app='',messageId=''){
+ if(impersonating)throw Error('Apps are unavailable in Login As.');
+ const pendingKey=gid+':'+command+':'+messageId;if(lcAppPending.has(pendingKey))throw Error('That app request is already running.');lcAppPending.add(pendingKey);try{
+ const r=await fetch(AI_WORKER_URL.replace(/\/$/,'')+'/server-apps',{method:'POST',headers:await aiAuthHeaders(),body:JSON.stringify({gid,command,args,app,messageId})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'App request failed.');return d;}finally{lcAppPending.delete(pendingKey);}
+}
+function lcAppList(gid,area,onlyInstalled){area.replaceChildren();if(onlyInstalled&&!lcCanManageApps(gid))return;
+ const entries=onlyInstalled?lcInstalled(gid):Object.entries(LC_SERVER_APPS);if(!entries.length)area.append(lcAppNode('p','No installed apps yet. Use /apps to browse.'));
+ for(const [id,a] of entries){const row=lcAppNode('section',undefined,'lc-app-card');row.append(lcAppNode('strong',a.icon+' '+a.name),lcAppNode('p',a.desc),lcAppNode('small',a.commands.map(c=>'/'+c).join(' · ')));const installed=serverData[gid]?.installedApps?.[id]===true;
+ if(lcCanManageApps(gid)){const button=lcAppBtn(installed?'Uninstall':'Install',async()=>{if(!lcCanManageApps(gid))return;button.disabled=true;try{await db.ref('groups/'+gid+'/installedApps/'+id).set(installed?null:true);const s=serverData[gid];if(s){s.installedApps??={};if(installed)delete s.installedApps[id];else s.installedApps[id]=true;}lcAppList(gid,area,onlyInstalled);window.lcPlus?.serverChanged(gid);}catch(e){button.disabled=false;showToast(e.message);}});row.append(button);}else row.append(lcAppNode('small',installed?'Installed':'Only app managers can install'));
+ area.append(row);}
+}
+function lcOpenApps(gid){const d=lcAppDialog('Server App Store');const content=lcAppNode('div',undefined,'lc-app-list');d.append(lcAppNode('p','Built-in apps. No external bot accounts or paid APIs required.'),content,lcAppBtn('Close',()=>d.close()));lcAppList(gid,content,false);d.showModal();}
+function lcRenderRulesSettings(gid){const area=document.getElementById('settings-rules-pane');area.replaceChildren();if(!lcRulesOwner(gid))return;const r=serverData[gid]?.serverRules||{};
+ const title=lcAppNode('input');title.placeholder='Rules title (optional)';title.maxLength=100;title.value=r.title||'';
+ const body=lcAppNode('textarea');body.placeholder='Enter your server rules, one per line (optional)';body.maxLength=6000;body.rows=8;body.value=r.body||'';
+ const label=lcAppNode('label','Require members to agree before entering');const agree=lcAppNode('input');agree.type='checkbox';agree.checked=!!r.requireAgree;label.prepend(agree);
+ const save=lcAppBtn('Save rules',async()=>{if(!lcRulesOwner(gid))return;save.disabled=true;try{const text=body.value.trim();const value=text?{title:title.value.trim()||'Server Rules',body:text,requireAgree:agree.checked,version:crypto.randomUUID()}:null;await db.ref('groups/'+gid+'/serverRules').set(value);showToast(text?'Server rules updated. Members will see the new version.':'Server rules disabled.');}catch(e){showToast(e.message);}finally{save.disabled=false;}});
+ area.append(lcAppNode('p','Optional. Leave the rules blank to disable them. Saving a new version prompts members again.'),title,body,label,save,lcAppBtn('Remove rules',async()=>{if(!lcRulesOwner(gid)||!confirm('Remove server rules?'))return;try{await db.ref('groups/'+gid+'/serverRules').remove();lcRenderRulesSettings(gid);showToast('Rules removed.');}catch(e){showToast(e.message);}}));}
+let lcRuleDialog=null,lcRuleGateSeq=0;
+async function lcCheckServerRules(gid,s){const uid=currentUser?.uid,r=s?.serverRules;if(!uid)return false;if(!r?.body||!r.version||s.owner===uid)return true;
+ const receipt=await db.ref('serverRuleReceipts/'+gid+'/'+uid).once('value');if(receipt.val()===r.version)return true;
+ if(lcRuleDialog?.open)lcRuleDialog.close();
+ return new Promise(resolve=>{const d=lcAppDialog(r.title||'Server Rules');lcRuleDialog=d;let done=false;const finish=v=>{if(done)return;done=true;resolve(v);d.close();if(lcRuleDialog===d)lcRuleDialog=null;};
+ d.append(lcAppNode('p',s.name||'Server'),lcAppNode('div',r.body,'lc-rules-body'));const buttons=lcAppNode('div',undefined,'lc-app-actions');
+ const accept=lcAppBtn(r.requireAgree?'Agree':'Continue',async()=>{accept.disabled=true;try{if(currentUser?.uid!==uid)return finish(false);await db.ref('serverRuleReceipts/'+gid+'/'+uid).set(r.version);finish(true);}catch(e){accept.disabled=false;showToast('Could not save agreement: '+e.message);}});
+ if(r.requireAgree)buttons.append(lcAppBtn('Decline',()=>finish(false)));buttons.append(accept);d.append(buttons);d.addEventListener('cancel',e=>{e.preventDefault();finish(false);});d.addEventListener('close',()=>{if(!done){done=true;resolve(false);}},{once:true});d.showModal();});}
+async function lcServerEntry(gid,proceed){const seq=++lcRuleGateSeq,uid=currentUser?.uid;try{const s=(await db.ref('groups/'+gid).once('value')).val();if(!s||currentUser?.uid!==uid||seq!==lcRuleGateSeq)return;const yes=await lcCheckServerRules(gid,s);if(yes&&seq===lcRuleGateSeq&&currentUser?.uid===uid)await proceed(s);else if(!yes&&seq===lcRuleGateSeq){if(currentChatData?.groupId===gid){detachChatListeners();detachServerCallWatch();closeMobileChat();document.getElementById('messages').replaceChildren();document.getElementById('chat-area').classList.add('hidden');}showToast('Server rules not accepted. You can try again later.');}}catch(e){showToast('Could not open server: '+e.message);}}
+// Only the current role's usable commands, including installed apps. /help itself isn't counted.
+function lcAvailableCommands(gid){if(!gid)return [];const base=COMMANDS.filter(c=>{const cmd=c.s.split(/[\s<]/)[0];if(cmd==='/help')return false;if(['/me','/shrug','/roll'].includes(cmd))return lcCanBasicCommands(gid);if(cmd==='/role')return getMyRole(gid)==='owner';return canServerModerate(gid);});
+ base.push({s:'/apps',d:lcCanManageApps(gid)?'Browse and install server apps.':'Browse server apps.'});for(const [,a] of lcInstalled(gid))for(const cmd of a.commands){const i=base.findIndex(x=>x.s.split(/[\s<]/)[0]==='/'+cmd);if(i>=0)base.splice(i,1);base.push({s:'/'+cmd,d:a.name+' — '+a.desc});}return base;}
+function lcRunAppCommand(text,gid){const m=text.match(/^\/([a-z-]+)(?:\s+([\s\S]*))?$/i);if(!m)return false;const cmd=m[1].toLowerCase(),args=m[2]||'';if(cmd==='apps'){lcOpenApps(gid);return true;}const installed=lcInstalled(gid).find(([,a])=>a.commands.includes(cmd));if(!installed)return false;
+ if(amIMuted(gid)){showToast('You are muted in this server.');return true;}if(!amIMemberOf(gid)){showToast('You are no longer a member.');return true;}
+ lcAppRequest(gid,cmd,args,installed[0]).catch(e=>showToast(e.message));return true;}
+function lcRenderAppMessage(key,msg){const app=LC_SERVER_APPS[msg.botApp];if(!app||msg.sender!=='lc-app-'+msg.botApp)return false;currentMessages[key]=msg;maybeInsertDateDivider(msg.timestamp);const wrap=lcAppNode('div',undefined,'msg-container received lc-app-message');wrap.id='msg-wrapper-'+key;const av=lcAppNode('div',app.icon,'msg-avatar lc-app-avatar');const content=lcAppNode('div',undefined,'lc-app-message-content');const header=lcAppNode('div',undefined,'lc-app-message-header');header.append(lcAppNode('strong',app.name),lcAppNode('span','APP','lc-app-tag'),lcAppNode('small',new Date(msg.timestamp||Date.now()).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})));content.append(header);
+ if(msg.type==='poll'){const holder=lcAppNode('div',undefined,'interactive-holder');holder.append(buildInteractiveCard(msg,key,true));content.append(holder);}else content.append(lcAppNode('div',msg.text||'','lc-app-message-text'));
+ const gid=currentChatData?.groupId;
+ if(msg.hasAnswer&&!msg.answerRevealed&&lcCanManageApps(gid)&&serverData[gid]?.installedApps?.[msg.botApp]){const button=lcAppBtn('View answer',async()=>{if(!lcCanManageApps(gid))return;button.disabled=true;try{await lcAppRequest(gid,'reveal','',msg.botApp,key);}catch(e){button.disabled=false;showToast(e.message);}});button.className='lc-reveal-answer';content.append(button);}
+ if(msg.hasAnswer&&msg.answerRevealed)content.append(lcAppNode('small','Answer revealed to everyone.'));
+ if(getMyRole(gid)==='owner'){content.addEventListener('contextmenu',e=>{e.preventDefault();ownerDeleteMessage(key);});}
+ wrap.append(av,content);const box=document.getElementById('messages');box.append(wrap);box.scrollTop=box.scrollHeight;return true;}
+function lcRefreshBotButtons(gid){if(currentChatData?.groupId!==gid)return;for(const [key,m] of Object.entries(currentMessages||{})){if(!m?.botApp||!m.hasAnswer)continue;const w=document.getElementById('msg-wrapper-'+key);if(!w)continue;const should=!m.answerRevealed&&lcCanManageApps(gid)&&serverData[gid]?.installedApps?.[m.botApp];const old=w.querySelector('.lc-reveal-answer');if(!should&&old)old.remove();else if(should&&!old){const c=w.querySelector('.lc-app-message-content');if(c){const b=lcAppBtn('View answer',async()=>{b.disabled=true;try{await lcAppRequest(gid,'reveal','',m.botApp,key);}catch(e){b.disabled=false;showToast(e.message);}});b.className='lc-reveal-answer';c.append(b);}}}}
+function lcAddBotMembers(panel,gid){const entries=lcInstalled(gid);if(!entries.length)return;panel.append(lcAppNode('h3','Apps — '+entries.length));for(const [id,a] of entries){const row=lcAppNode('div',undefined,'lc-app-member');row.append(lcAppNode('span','🟢 '+a.icon),lcAppNode('strong',a.name),lcAppNode('span','APP','lc-app-tag'));panel.append(row);}}
+function lcWireSlashAutocomplete(){const input=document.getElementById('message-input');if(!input)return;const box=lcAppNode('div',undefined,'lc-at-suggest');box.id='lc-slash-suggest';box.hidden=true;input.parentElement.append(box);let choices=[],index=0;
+ function pick(i){if(!choices[i])return;input.value=choices[i].value+' ';box.hidden=true;choices=[];input.focus();input.dispatchEvent(new Event('input',{bubbles:true}));}
+ function draw(){box.replaceChildren();choices.forEach((c,i)=>{const b=lcAppBtn(c.label,()=>pick(i));b.className='lc-at-choice'+(i===index?' active':'');b.onmousedown=e=>e.preventDefault();box.append(b);});box.hidden=!choices.length;}
+ input.addEventListener('input',()=>{const gid=currentChatData?.groupId,val=input.value;choices=[];index=0;if(gid&&/^\/[a-z-]*$/i.test(val)){choices=[{s:'/help',d:'Show your available commands'},...lcAvailableCommands(gid)].filter(c=>c.s.toLowerCase().startsWith(val.toLowerCase())).map(c=>({value:c.s.split(/[\s<]/)[0],label:c.s+' · '+c.d})).slice(0,15);}
+ else if(gid&&/^\/(ban|kick|mute|unmute|role|duel)\s+@?[^\s]*$/i.test(val)){const [word,partial='']=val.split(/\s+/);const allowed=lcAvailableCommands(gid).some(c=>c.s.split(/[\s<]/)[0]===word);if(allowed){choices=Object.entries(serverData[gid]?.members||{}).filter(([id,m])=>id!==currentUser.uid&&(word==='/duel'||id!==serverData[gid].owner)&&String(m.username||'').toLowerCase().startsWith(partial.replace(/^@/,'').toLowerCase())).map(([,m])=>({value:word+' '+m.username,label:m.username+' · Member'})).slice(0,12);}}
+ draw();if(!box.hidden){hideMention();const at=document.getElementById('lc-at-suggest');if(at)at.hidden=true;}});
+ input.addEventListener('keydown',e=>{if(box.hidden||!choices.length)return;if(!currentChatData?.isGroup){box.hidden=true;return;}if(['Tab','Enter','ArrowDown','ArrowUp','Escape'].includes(e.key)){e.preventDefault();e.stopImmediatePropagation();if(e.key==='Escape'){box.hidden=true;return;}if(e.key==='Tab'||e.key==='Enter'){pick(index);return;}index=(index+(e.key==='ArrowDown'?1:-1)+choices.length)%choices.length;draw();}},true);
+ input.addEventListener('blur',()=>setTimeout(()=>{box.hidden=true;},120));}
+
+lcWireSlashAutocomplete();
+</script>
 </body>
 </html>
