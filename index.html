@@ -2148,7 +2148,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
     (function () {
         try {
             var cached = {};
-            try { cached = JSON.parse(localStorage.getItem('chatapp.cachedPrefs.' + (currentUser ? currentUser.uid : 'signedout')) || '{}') || {}; } catch (_) {}
+            try { cached = JSON.parse(localStorage.getItem('chatapp.cachedPrefs.signedout') || '{}') || {}; } catch (_) {}
             var theme = localStorage.getItem('chatapp.theme') || cached.theme || (cached.darkMode ? 'dark' : '');
             if (!theme) return;
             var darkThemes = { dark:1, midnight:1, ocean:1, forest:1, grape:1, sunset:1, crimson:1 };
@@ -5427,6 +5427,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 avatar.className = 'list-avatar';
                 paintAvatar(avatar, friendUid, displayName);
                 const nameSpan = document.createElement('span');
+                nameSpan.className = 'lc-sidebar-name';
                 nameSpan.innerText = displayName;
                 const dot = document.createElement('span');
                 dot.id = 'dot-' + friendUid;
@@ -5939,7 +5940,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 nameArea.style.flex = '1';
                 const hasCustomRole=!!livechatRoleForMember(groupId,currentUser.uid);
                 const showBadge = hasCustomRole || (role !== 'peasant') || appPrefs.showRoleBadges;
-                nameArea.innerHTML = `<span>👥 ${escapeHtml(groupName)}</span>${lcIsPinnedConversation(groupId)?'<span title="Pinned conversation">📌</span>':''}${showBadge ? livechatRoleBadge(groupId,currentUser.uid,role) : ''}`;
+                nameArea.innerHTML = `<span class="lc-sidebar-name">👥 ${escapeHtml(groupName)}</span>${lcIsPinnedConversation(groupId)?'<span title="Pinned conversation">📌</span>':''}${showBadge ? livechatRoleBadge(groupId,currentUser.uid,role) : ''}`;
                 item.appendChild(nameArea);
 
                 // Unread badge
@@ -14805,6 +14806,14 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             if (t.id !== 'light' && t.id !== 'dark') document.body.classList.add('theme-' + t.id);
             // keep legacy darkMode flag roughly in sync (so old code paths still behave)
             appPrefs.darkMode = !!t.dark;
+            try { localStorage.setItem('chatapp.theme', t.id); } catch (_) {}
+            const select = document.getElementById('lc-modern-theme');
+            if (select) select.value = t.id;
+            document.querySelectorAll('[data-lc-theme-choice]').forEach(button => {
+                button.setAttribute('aria-pressed', String(button.dataset.lcThemeChoice === t.id));
+            });
+            const classicGrid = document.getElementById('theme-grid');
+            if (classicGrid) Array.from(classicGrid.children).forEach((button, i) => button.classList.toggle('sel', THEMES[i]?.id === t.id));
         }
         function renderThemeGrid() {
             const grid = document.getElementById('theme-grid'); if (!grid) return;
@@ -19782,7 +19791,19 @@ function notifications(parent){h(parent,'Notifications');const card=box(parent);
  for(const [value,label] of [['all','All chats'],['dm','Direct messages only'],['none','Nothing']]){const op=create('option','',label);op.value=value;scope.append(op)}
  scope.value=appPrefs?.notifScope||'all';scope.onchange=()=>{if(isImpersonated())return;appPrefs.notifScope=scope.value;savePrefs()};scopeRow.append(scope);
  checkSetting(card,'Notification previews','notifPreview',null,'Show message text in notifications.');window.lcPlus?.injectNotifications(card);}
-function appearance(parent){h(parent,'Appearance');const card=box(parent);card.append(create('p','','Adjust how much chat history LiveChat loads initially.'));
+function appearance(parent){h(parent,'Appearance');
+ const themes=box(parent);themes.id='lc-modern-theme-card';themes.append(create('h2','','Theme'),create('p','lc-muted','Choose Light or Dark, or select another color theme. Changes apply immediately and sync with your account.'));
+ const choices=box(themes,'lc-theme-choices');choices.setAttribute('role','group');choices.setAttribute('aria-label','Light or dark mode');
+ const active=appPrefs?.theme||(appPrefs?.darkMode?'dark':'light');
+ function chooseTheme(value){if(isImpersonated()){toast('Protected settings cannot be changed in Login As.');return false;}setTheme(value);return true;}
+ for(const [value,label,icon] of [['light','Light','☀'],['dark','Dark','☾']]){
+  const b=action(choices,icon+'  '+label,()=>chooseTheme(value),'lc-theme-choice');b.dataset.lcThemeChoice=value;b.setAttribute('aria-pressed',String(active===value));
+ }
+ const themeRow=box(themes,'lc-settings-row');const themeLabel=text(themeRow,'All themes','Includes the original color themes.');
+ const themeSelect=create('select');themeSelect.id='lc-modern-theme';themeSelect.setAttribute('aria-label','All color themes');
+ for(const t of THEMES){const op=create('option','',t.name);op.value=t.id;themeSelect.append(op)}
+ themeSelect.value=THEMES.some(t=>t.id===active)?active:'light';themeSelect.onchange=()=>{if(!chooseTheme(themeSelect.value))themeSelect.value=appPrefs?.theme||'light'};themeRow.append(themeSelect);
+ const card=box(parent);card.append(create('p','','Adjust how much chat history LiveChat loads initially.'));
  const row=box(card,'lc-settings-row');text(row,'Messages initially shown','50 recommended · more messages can slow down older devices.');const sel=create('select');for(const n of [20,30,50,75,100]){const opt=create('option','',n+' messages'+(n===50?' · recommended':''));opt.value=n;sel.append(opt)}sel.value=appPrefs?.messageLimit||50;sel.style.width='150px';sel.onchange=()=>{if(isImpersonated()){toast('Protected settings cannot be changed in Login As.');return}appPrefs.messageLimit=Number(sel.value);savePrefs();if(typeof refreshChatMessageWindow==='function')refreshChatMessageWindow();if(+sel.value>=75)toast('Higher limits can cause lag with GIFs and videos.')};row.append(sel);
  checkSetting(card,'Show offline connection warning','showOfflineOverlay',on=>{
    try{localStorage.setItem('lc:showOfflineOverlay',on?'1':'0')}catch(e){}
@@ -19793,9 +19814,6 @@ function appearance(parent){h(parent,'Appearance');const card=box(parent);card.a
    if(on)window.lcChess?.refreshFriends?.();
  },'OFF by default. When enabled, a small chess icon opens rating and point-change details without expanding the entire Friends list.');
  checkSetting(card,'Compact media previews','dataSaver',null,'Reduce data usage where supported.');
- const themeRow=box(card,'lc-settings-row');text(themeRow,'Theme','Choose the colors of the whole app, just like Classic Settings.');
- const themeSelect=create('select');for(const [value,label] of [['light','Light'],['dark','Dark'],['midnight','Midnight'],['ocean','Ocean'],['forest','Forest'],['grape','Grape'],['sunset','Sunset'],['crimson','Crimson'],['rose','Rose'],['slate','Slate']]){const op=create('option','',label);op.value=value;themeSelect.append(op)}
- themeSelect.value=appPrefs?.theme||'light';themeSelect.onchange=()=>{if(isImpersonated())return;appPrefs.theme=themeSelect.value;savePrefs();if(typeof applyTheme==='function')applyTheme(themeSelect.value)};themeRow.append(themeSelect);
  const textRow=box(card,'lc-settings-row');text(textRow,'App & message text size','Changes chat text and Settings size immediately.');
  const textSelect=create('select');for(const [value,label] of [['small','Small'],['normal','Normal'],['large','Large']]){const op=create('option','',label);op.value=value;textSelect.append(op)}textSelect.value=appPrefs?.textSize||'normal';textSelect.onchange=()=>{if(isImpersonated())return;appPrefs.textSize=textSelect.value;savePrefs();applyPrefs()};textRow.append(textSelect);
  checkSetting(card,'Show role badges','showRoleBadges',()=>{if(typeof renderGroupsList==='function')renderGroupsList()},'Display role badges next to usernames.');
@@ -24347,5 +24365,64 @@ function lcWireSlashAutocomplete(){const input=document.getElementById('message-
 
 lcWireSlashAutocomplete();
 </script>
+
+<style id="lc-readable-theme-update">
+/* Sidebar names and unread backgrounds must use the same palette. */
+#sidebar { --lc-side-row: #30354c; --lc-side-hover: #3c425c; --lc-side-unread: #353c60; --lc-side-active: #414975; --lc-side-text: #f3f5ff; --lc-side-muted: #bdc5dc; }
+#sidebar :is(#friends-list,#groups-list) .list-item { color:var(--lc-side-text); background:var(--lc-side-row); transition:transform .12s,box-shadow .15s; }
+#sidebar :is(#friends-list,#groups-list) .list-item:hover { background:var(--lc-side-hover); }
+#sidebar :is(#friends-list,#groups-list) .list-item.has-unread { background:var(--lc-side-unread)!important; }
+#sidebar :is(#friends-list,#groups-list) .list-item.has-unread:hover { background:var(--lc-side-active)!important; }
+#sidebar .lc-sidebar-name { color:var(--lc-side-text); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#sidebar .friend-custom,#sidebar .lc-friend-bio { color:var(--lc-side-muted); opacity:1; }
+#sidebar .list-item > .server-gear { color:var(--lc-side-muted); }
+#sidebar .list-item > .server-gear:hover { color:var(--lc-side-text); background:var(--lc-side-hover); }
+#sidebar .list-item > .unread-badge { background:#b91c1c!important;color:white!important;border-color:var(--lc-side-unread); }
+#sidebar #groups-list.lc-server-grid .list-item:not(.has-unread) { background:transparent; }
+/* True light sidebar; preserve the original tinted sidebars for Rose and Slate. */
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar {
+ --lc-side-row:#fff; --lc-side-hover:#e8ebf6; --lc-side-unread:#e4e8ff; --lc-side-active:#d8dffe; --lc-side-text:#20283b; --lc-side-muted:#4b556b;
+ background:#f1f3f9;color:#20283b;border-right-color:#d6dce7;
+}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .sidebar-header {background:#e9edf6;border-color:#d6dce7;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .section {border-color:#d6dce7;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .section h4 {color:#46516b;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .section input,
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar #sidebar-search {background:white;color:#20283b;border-color:#c5ccdc;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar input::placeholder {color:#59657b;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .list-item {border-color:#d9deea;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .friend-filter:not(.active) {background:#e1e5f1;color:#34405b;border-color:#cbd2e1;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-account-dock {background:#e5e9f3;color:#20283b;border-color:#cbd2e1;box-shadow:none;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-dock-subtitle {color:#4b556b;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) :is(#lc-dock-profile,#lc-dock-settings):hover {background:#d5dcec;}
+/* New Settings follows the actual theme, rather than always being dark. */
+body:not(.dark) #lc-discord-settings {background:#f5f6fa;color:#20283b;}
+body:not(.dark) #lc-settings-left {background:#e9edf4;border-color:#d0d7e4;}
+body:not(.dark) #lc-settings-main {background:#f5f6fa;}
+body:not(.dark) #lc-settings-menu .lc-menu-cat {color:#526078;}
+body:not(.dark) #lc-settings-menu button {color:#38445d;}
+body:not(.dark) #lc-settings-menu button:hover,body:not(.dark) #lc-settings-menu button.lc-selected {background:#dce3f4;color:#202b55;}
+body:not(.dark) #lc-settings-close {color:#36415a;border-color:#63718b;}
+body:not(.dark) #lc-settings-close:hover {background:#e0e6f3;}
+body:not(.dark) #lc-settings-body :is(h1,h2) {color:#20283b;}
+body:not(.dark) #lc-settings-body .lc-settings-card {background:white;border:1px solid #dce1eb;}
+body:not(.dark) #lc-settings-body .lc-settings-row {border-color:#dce1eb;}
+body:not(.dark) #lc-settings-body :is(p,.lc-muted,label,.lc-settings-row span) {color:#4b556b;}
+body:not(.dark) #lc-settings-body :is(input:not([type=file]):not([type=checkbox]),textarea,select) {background:#f7f8fc;color:#20283b;border-color:#c5ccdc;}
+body:not(.dark) #lc-settings-body .lc-note {background:#eaf0ff;color:#273e76;border-color:#aabce8;}
+body:not(.dark) #lc-settings-body .lc-cosmetic {background:#e9edf6;color:#20283b;}
+body:not(.dark) #lc-settings-body .lc-cosmetic.lc-choice-on {background:#dce3ff;}
+body:not(.dark) #lc-settings-body .lc-plus-settings {background:#f5f7fb;border-color:#d6dce7;}
+body:not(.dark) #lc-settings-body .lc-plus-setting {color:#20283b;border-color:#d6dce7;}
+body:not(.dark) #lc-settings-body .lc-plus-setting small {color:#4b556b;}
+/* Explicit choice buttons at the top of Appearance. */
+#lc-modern-theme-card h2 {margin-top:0;}
+#lc-modern-theme-card .lc-theme-choices {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0;}
+#lc-modern-theme-card .lc-theme-choice {min-width:0;padding:15px 5px;font:700 14px system-ui;border:2px solid #777e91;border-radius:9px;cursor:pointer;background:#f8fafc;color:#20283b;}
+#lc-modern-theme-card .lc-theme-choice[data-lc-theme-choice="dark"] {background:#20232c;color:#f1f4ff;}
+#lc-modern-theme-card .lc-theme-choice[aria-pressed="true"] {border-color:#6366f1;box-shadow:0 0 0 2px #6366f1;}
+#lc-modern-theme-card #lc-modern-theme {width:auto;max-width:100%;min-width:0;}
+@media(max-width:490px){#lc-modern-theme-card .lc-settings-row{flex-wrap:wrap;}#lc-modern-theme-card #lc-modern-theme{width:100%;}}
+</style>
 </body>
 </html>
