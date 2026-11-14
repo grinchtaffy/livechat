@@ -24424,5 +24424,83 @@ body:not(.dark) #lc-settings-body .lc-plus-setting small {color:#4b556b;}
 #lc-modern-theme-card #lc-modern-theme {width:auto;max-width:100%;min-width:0;}
 @media(max-width:490px){#lc-modern-theme-card .lc-settings-row{flex-wrap:wrap;}#lc-modern-theme-card #lc-modern-theme{width:100%;}}
 </style>
+
+<style id="lc-clean-light-theme">
+/* Default Light only. Dark and all named palettes keep their existing styling. */
+body:not(.dark):not(.theme-rose):not(.theme-slate) {
+ --lc-light-nav:#f5f6f8; --lc-light-main:#fff; --lc-light-soft:#e9ecf2;
+ --lc-light-text:#202637; --lc-light-muted:#566176; --lc-light-accent:#4f46c8;
+ --lc-light-tint:#e8e7fc; --lc-light-hover:#e1e3ee;
+ background:var(--lc-light-main); color:var(--lc-light-text); color-scheme:light;
+}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar {
+ --lc-side-row:transparent; --lc-side-hover:var(--lc-light-soft); --lc-side-unread:var(--lc-light-tint);
+ --lc-side-active:#deddf7; --lc-side-text:var(--lc-light-text); --lc-side-muted:var(--lc-light-muted);
+ background:var(--lc-light-nav); border-right:1px solid #e5e7eb; box-sizing:border-box;
+}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar :is(.sidebar-header,.section,#lc-classic-widgets) {
+ background:transparent; border:0; box-shadow:none; backdrop-filter:none;
+}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .sidebar-header {padding:18px 12px 10px; gap:8px;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .section {padding:8px 12px 12px;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .section h4 {color:var(--lc-light-muted);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .my-status-pill {background:var(--lc-light-soft); color:var(--lc-light-text); border:0; margin-top:0;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .my-status-pill:hover {background:var(--lc-light-hover);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .header-actions {gap:6px;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .header-actions button {border:0;border-radius:8px;box-shadow:none;font-weight:600;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .header-actions button[onclick="logout()"] {background:#f8e5e5;color:#a12626;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar #homework-ai-btn {background:var(--lc-light-tint)!important;color:#4039a3!important;margin-left:0;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar #homework-ai-btn:hover {background:#deddf7!important;}
+/* The legacy shortcut is created with inline colors; override those only in Light. */
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar #lc-original-settings-shortcut {
+ background:transparent!important;color:var(--lc-light-text)!important;border:0!important;
+ margin:2px 12px!important;width:calc(100% - 24px)!important;min-height:32px!important;
+ padding:7px 9px!important;box-shadow:none;font-weight:600;
+}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar #lc-original-settings-shortcut:hover {background:var(--lc-light-soft)!important;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar #lc-classic-widgets {padding:5px 12px 8px;gap:6px;color:var(--lc-light-text);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar #lc-classic-widgets button {background:var(--lc-light-soft);color:var(--lc-light-text);border:0;box-shadow:none;border-radius:8px;font-weight:600;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar #lc-classic-widgets button:hover {background:var(--lc-light-hover);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar #lc-classic-widgets .lc-widget-heading {color:var(--lc-light-muted);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar :is(.section input,#sidebar-search) {background:#fff;border:1px solid #dce0e8;box-shadow:none;border-radius:9px;color:var(--lc-light-text);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar :is(.section input,#sidebar-search):focus {border-color:#7871dc;box-shadow:0 0 0 3px #deddf7;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .section button {box-shadow:none;border-radius:8px;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar button[onclick="sendFriendRequest()"] {background:var(--lc-light-accent);color:#fff;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .section-head .hdr-btn {background:var(--lc-light-tint)!important;color:#4039a3;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .section-head .hdr-btn[onclick="showCreateGroupModal()"] {background:#e0eee6!important;color:#21663e;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .friend-filters {background:var(--lc-light-soft);border-radius:9px;padding:3px;gap:2px;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .friend-filter {background:transparent;border:0;color:var(--lc-light-muted);box-shadow:none;margin:0;min-width:0;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .friend-filter:not(.active) {background:transparent;border:0;color:var(--lc-light-muted);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .friend-filter.active {background:#fff;color:#4039a3;box-shadow:0 1px 3px #20263715;}
+/* Flat conversation rows, one unread indicator instead of multiple red borders/shadows. */
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .list-item {border:0;box-shadow:none;border-radius:9px;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar :is(#friends-list,#groups-list) .list-item.has-unread {border-left:0!important;box-shadow:none;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .list-item:hover {transform:none;box-shadow:none;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .list-item > .unread-badge {border:0!important;box-shadow:none!important;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .list-item > .server-gear {background:transparent;box-shadow:none;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar .list-item > .server-gear:hover {background:var(--lc-light-hover);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #sidebar #lc-account-dock {background:var(--lc-light-nav);border-top:1px solid #e3e6ed;box-shadow:none;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-sidebar-scroll {scrollbar-width:thin;scrollbar-color:#c2c8d2 transparent;}
+/* Match the main conversation and member panel to the new flat navigation. */
+body:not(.dark):not(.theme-rose):not(.theme-slate) :is(#chat-area,#chat-empty,#messages) {background:var(--lc-light-main);color:var(--lc-light-text);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #chat-empty .ce-title {color:var(--lc-light-text);font-weight:700;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #chat-empty .ce-sub {color:var(--lc-light-muted);opacity:1;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) :is(#chat-header,#chat-input-area) {background:#fff;border-color:#eceef2;box-shadow:none;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #chat-header .call-header-btn {background:var(--lc-light-soft);border:0;color:var(--lc-light-text);box-shadow:none;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #messages .msg.received {background:#f0f2f5;border:0;box-shadow:none;color:var(--lc-light-text);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-members-panel {background:var(--lc-light-nav);color:var(--lc-light-text);border-left:1px solid #e5e7eb;box-shadow:none;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-members-panel :is(h3,h4,.lc-member-bio,.lc-member-info) {color:var(--lc-light-muted);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-members-panel .lc-member-row:hover {background:var(--lc-light-soft);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-members-panel .lc-member-row.lc-offline {opacity:1;color:var(--lc-light-muted);}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-members-panel .lc-presence-dot {border-color:var(--lc-light-nav);}
+/* Settings: soft surfaces, no stacked outlines. Keep visible keyboard focus. */
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-discord-settings,body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-settings-main {background:#fff;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-settings-left {background:var(--lc-light-nav);border-color:#eceef2;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-settings-body .lc-settings-card {background:var(--lc-light-nav);border:0;border-radius:12px;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-settings-body .lc-settings-row {border-color:#e9ebf0;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-modern-theme-card .lc-theme-choice {border:1px solid transparent;box-shadow:none;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-modern-theme-card .lc-theme-choice[aria-pressed="true"] {border-color:#6366f1;box-shadow:0 0 0 2px #6366f133;}
+body:not(.dark):not(.theme-rose):not(.theme-slate) :is(#sidebar,#lc-discord-settings) :is(button,input,select,[tabindex]):focus-visible {outline:2px solid #635bdb;outline-offset:2px;}
+</style>
 </body>
 </html>
