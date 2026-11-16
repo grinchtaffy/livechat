@@ -17,6 +17,9 @@
     <title>Real-Time Messaging App</title>
     <link id="livechat-default-favicon" rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20128%20128%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22night%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20stop-color%3D%22%23272176%22%2F%3E%3Cstop%20offset%3D%220.52%22%20stop-color%3D%22%236b50e9%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2306b6d4%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22speech%22%20x1%3D%220%22%20y1%3D%221%22%20x2%3D%221%22%20y2%3D%220%22%3E%0A%20%20%20%20%20%20%3Cstop%20stop-color%3D%22%23e1fdff%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23fff%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Crect%20x%3D%225%22%20y%3D%225%22%20width%3D%22118%22%20height%3D%22118%22%20rx%3D%2232%22%20fill%3D%22url%28%23night%29%22%2F%3E%0A%20%20%3Ccircle%20cx%3D%22104%22%20cy%3D%2226%22%20r%3D%2216%22%20fill%3D%22%23fff%22%20opacity%3D%22.10%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M29%2040c0-11%209-20%2020-20h36c11%200%2020%209%2020%2020v33c0%2011-9%2020-20%2020H55L30%20107V88c-6-4-9-10-9-17V47c0-3%203-7%208-7z%22%20fill%3D%22url%28%23speech%29%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M56%2043l5.8%2013.2L75%2062l-13.2%205.8L56%2081l-5.8-13.2L37%2062l13.2-5.8z%22%20fill%3D%22%236049e2%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M82%2035l2.5%207.5L92%2045l-7.5%202.5L82%2055l-2.5-7.5L72%2045l7.5-2.5z%22%20fill%3D%22%23089fcb%22%2F%3E%0A%20%20%3Ccircle%20cx%3D%2286%22%20cy%3D%2277%22%20r%3D%225%22%20fill%3D%22%231dbab4%22%2F%3E%0A%20%20%3Crect%20x%3D%225%22%20y%3D%225%22%20width%3D%22118%22%20height%3D%22118%22%20rx%3D%2232%22%20fill%3D%22none%22%20stroke%3D%22%23c9c6ff%22%20stroke-opacity%3D%22.28%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E">
     <meta name="theme-color" content="#6654e7">
+    <link rel="manifest" id="lc-web-manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" id="lc-apple-icon" href="./livechat-icon-180.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
     <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet">
     <meta name="referrer" content="strict-origin-when-cross-origin">
@@ -4056,6 +4059,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
 
         function logout() {
+            lcClearPushDevice();lcClearMediaCache();
             document.getElementById('lc-youtube-workspace')?.classList.add('hidden');lcYTSearch.seq++;lcYTSearch={...lcYTSearch,items:[],next:''};lcYTChannel={...lcYTChannel,id:'',items:[],next:''};
             for(const x of lcNameWatch.values())x.ref.off('value',x.cb);lcNameWatch.clear();for(const key of Object.keys(lcLiveDisplayNames))delete lcLiveDisplayNames[key];
             if (impersonating) {
@@ -4326,7 +4330,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     loadFriendRequests();
                     loadFriendsAndNicknames();
                     loadGroups();
-                    loadServerInvites(); loadUnread(); loadPrefs(); armNotificationPermissionOnNextGesture();
+                    loadServerInvites(); loadUnread(); loadPrefs(); armNotificationPermissionOnNextGesture(); setTimeout(()=>{lcOfferMobilePermissions();lcRestoreMobilePush();},600);
                     setupPresence(); setupCallListener(); setupGroupCallInviteListener();
                     loadCallRecordingFeatureSetting(); loadRecordingConsent(); loadKeybinds(); loadGlobalSettings(); loadTurnRelaySetting();
                     loadBlocked();
@@ -4815,7 +4819,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 const n=Number(lcUnreadDerived[id]||0);
                 if(n>0)merged[id]=Math.min(n,99999);
             }
-            unreadData=merged;renderFriendsList();renderGroupsList();updateTabTitle();
+            unreadData=merged;renderFriendsList();renderGroupsList();updateTabTitle();if(navigator.setAppBadge){const n=Object.values(merged).reduce((a,b)=>a+b,0);(n?navigator.setAppBadge(n):navigator.clearAppBadge?.())?.catch(()=>{});}
         }
         function lcScheduleUnreadSync() {
             if(!currentUser||!firebaseReady||lcUnreadSyncTimer)return;
@@ -4994,7 +4998,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
         let notifGestureArmed = false;
         function armNotificationPermissionOnNextGesture() {
-            if (notifGestureArmed || !appPrefs.notifEnabled || !('Notification' in window) || Notification.permission !== 'default') return;
+            if (lcIsInstalled() || notifGestureArmed || !appPrefs.notifEnabled || !('Notification' in window) || Notification.permission !== 'default') return;
             notifGestureArmed = true;
             const ask = () => {
                 document.removeEventListener('pointerdown', ask, true);
@@ -5016,7 +5020,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             if (!lcNotificationRegistrationPromise) {
                 // Query version forces ChromeOS to fetch the corrected click handler.
                 // Keep the worker scope limited to the messaging app, not the public homepage.
-                lcNotificationRegistrationPromise = navigator.serviceWorker.register('/livechat/livechat-notification-sw.js?v=20261110b', {
+                lcNotificationRegistrationPromise = navigator.serviceWorker.register('/livechat/livechat-notification-sw.js?v=20261115c', {
                     scope: '/livechat/', updateViaCache: 'none'
                 }).then(reg => {
                     reg.update().catch(() => {});
@@ -5056,7 +5060,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             }
             const opts = {
                 body: preview,
-                tag: 'msg-' + (onClickChat ? (onClickChat.id || '') : Date.now()),
+                tag: onClickChat?.messageKey ? 'lc-push-'+onClickChat.messageKey : 'msg-' + (onClickChat ? (onClickChat.id || '') : Date.now()),
                 renotify: true,
                 data: { appUrl: lcNotificationAppUrl, key }
             };
@@ -6227,7 +6231,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             if (tab === 'roles' && !canManageServerRoles(groupId)) tab = 'members';
             if(tab==='rules'&&!lcRulesOwner(groupId))tab='members';if(tab==='apps'&&!lcCanManageApps(groupId))tab='members';
             for(const [key,allowed] of [['rules',lcRulesOwner(groupId)],['apps',lcCanManageApps(groupId)]]){document.getElementById('tab-'+key).classList.toggle('hidden',!allowed);document.getElementById('tab-'+key).classList.toggle('active',tab===key);document.getElementById('settings-'+key+'-pane').classList.toggle('hidden',tab!==key);}
-            if(tab==='rules')lcRenderRulesSettings(groupId);if(tab==='apps')lcAppList(groupId,document.getElementById('settings-apps-pane'),true);
+            if(tab==='rules'){lcRenderRulesSettings(groupId);lcRenderWordFilter(groupId);}if(tab==='apps')lcAppList(groupId,document.getElementById('settings-apps-pane'),true);
             const isMembers = tab === 'members', isInvite = tab === 'invite', isRoles = tab === 'roles';
             document.getElementById('tab-members').classList.toggle('active', isMembers);
             document.getElementById('tab-invite').classList.toggle('active', isInvite);
@@ -6551,7 +6555,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     if (shouldNotify('group') || (Array.isArray(m.mentions) && m.mentions.includes(currentUser.uid) && appPrefs.notifEnabled)) {
                         const senderName = (m.sender && ((myNicknamesData && myNicknamesData[m.sender]) || userNameCache[m.sender])) || m.senderName || 'Someone';
                         notify(gName + ' · ' + senderName, msgPreview(m), {
-                            id: groupId,
+                            id: groupId,messageKey:snap.key,
                             open: () => openGroupChat(groupId, gName)
                         }, m.sender || null);
                     }
@@ -6878,14 +6882,14 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             lcMediaReply(msgData,target);
             msgData = decorateAdminServerMessage(msgData);
             const optimistic = Object.assign({}, msgData, { timestamp: Date.now() });
-            mediaCache[chatId + '/' + key] = base64Data; // so the optimistic local render doesn't need a round trip
+            lcCacheMedia(chatId + '/' + key,base64Data); // so the optimistic local render doesn't need a round trip
             if (currentChatData && currentChatData.chatId === chatId && !document.getElementById('msg-wrapper-' + key)) {
                 renderMessage(key, optimistic);
             }
             showToast(mediaType === 'image' ? 'Sending photo…' : 'Sending…');
             db.ref('chatMedia/' + chatId + '/' + key).set(base64Data)
                 .then(() => {if(currentUser?.uid!==target.uid||!!impersonating!==target.actingAs)throw Error('Account changed during upload.');return db.ref('chats/' + chatId + '/' + key).set(msgData);})
-                .then(() => { notify(); if(currentUser?.uid===target.uid)addStorageBytes(base64Data.length); })
+                .then(() => { notify(); if(currentUser?.uid===target.uid){addStorageBytes(base64Data.length);lcNotifyPush(chatId,key);} })
                 .catch(err => {
                     const w = document.getElementById('msg-wrapper-' + key); if (w) w.remove();
                     if(currentChatData?.chatId===chatId)delete currentMessages[key];
@@ -6895,14 +6899,32 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
         // In-memory cache of fetched/sent media blobs, keyed "chatId/messageKey", so scrolling
         // past a photo twice (or the sender's own optimistic copy) doesn't re-fetch it.
-        let mediaCache = {};
+        let mediaCache = Object.create(null), lcMediaCacheChars=0;
+        function lcCacheMedia(key,value){
+            if(typeof value!=='string')return;
+            if(Object.hasOwn(mediaCache,key)){lcMediaCacheChars-=mediaCache[key].length;delete mediaCache[key];}
+            if(value.length>8*1024*1024)return;
+            while(lcMediaCacheChars+value.length>12*1024*1024||Object.keys(mediaCache).length>=32){const first=Object.keys(mediaCache)[0];if(!first)break;lcMediaCacheChars-=mediaCache[first].length;delete mediaCache[first];}
+            mediaCache[key]=value;lcMediaCacheChars+=value.length;
+        }
+        let lcMediaObserver=null;
+        const lcPendingMedia=new Map();
+        function lcLazyMedia(el,load){
+            if(!('IntersectionObserver' in window)){load();return;}
+            if(!lcMediaObserver)lcMediaObserver=new IntersectionObserver(entries=>{for(const entry of entries){if(!entry.isIntersecting)continue;const fn=lcPendingMedia.get(entry.target);lcPendingMedia.delete(entry.target);lcMediaObserver.unobserve(entry.target);if(entry.target.isConnected&&fn)fn();}},{root:document.getElementById('messages'),rootMargin:'250px'});
+            // Remove detached targets so rapid conversation/history updates cannot retain old DOM.
+            queueMicrotask(()=>{for(const target of lcPendingMedia.keys())if(!target.isConnected){lcMediaObserver?.unobserve(target);lcPendingMedia.delete(target);}});
+            lcPendingMedia.set(el,load);lcMediaObserver.observe(el);
+        }
+        function lcClearMediaCache(){mediaCache=Object.create(null);lcMediaCacheChars=0;lcMediaObserver?.disconnect();lcMediaObserver=null;lcPendingMedia.clear();}
+
         function resolveMediaSrc(chatId, msg, cb) {
             if (!msg.mediaKey) { cb(msg.text || ''); return; } // old-format message: blob was already inline
             const cacheKey = chatId + '/' + msg.mediaKey;
             if (mediaCache[cacheKey]) { cb(mediaCache[cacheKey]); return; }
             db.ref('chatMedia/' + chatId + '/' + msg.mediaKey).once('value').then(snap => {
                 const v = snap.val() || '';
-                mediaCache[cacheKey] = v;
+                if(currentChatData?.chatId===chatId)lcCacheMedia(cacheKey,v);
                 cb(v);
             }).catch(err => { console.warn('Could not load media', err); cb(null); });
         }
@@ -7887,7 +7909,8 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             // Editing an existing message?
             if (editContext && impersonating) { showToast('Editing old messages is unavailable in Login As.'); cancelReplyOrEdit(); return; }
             if (editContext) {
-                db.ref(`chats/${currentChatData.chatId}/${editContext.key}`).update({text,edited:true}).catch(e=>showToast('Edit could not be saved: '+e.message));
+                const editChat=currentChatData.chatId,editKey=editContext.key;
+                (currentChatData.isGroup&&serverData[editChat]?.wordFilter?.enabled?lcFilteredSend(editChat,{text},editKey,true):db.ref(`chats/${editChat}/${editKey}`).update({text,edited:true})).catch(e=>showToast('Edit could not be saved: '+e.message));
                 cancelReplyOrEdit();
                 input.value = '';
                 return;
@@ -7931,12 +7954,13 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     if (aliases.some(v => { const n=String(v||'').toLowerCase().trim();return !!n && lower.split('@'+n).slice(1).some(rest=>!rest || !/[a-z0-9_]/i.test(rest[0])) }))
                         msg.mentions=[theirUid];
                 }
+                const sentChat={...currentChatData},sentUid=currentUser.uid;
                 pushCurrentChatMessage(msg).then(() => {
                     playBeepOut();
-                    bumpUnreadForCurrentChat();
+                    bumpUnreadForCurrentChat(sentChat,sentUid);
                 }).catch(err => {
                     console.warn('Message send failed:', err);
-                    showToast('Message failed to send. Check your connection or Firebase rules.');
+                    showToast(err?.message||'Message failed to send. Check your connection or Firebase rules.');
                 });
             }
             cancelReplyOrEdit();
@@ -8881,7 +8905,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             for (const uid in adminStatusRefs) { try { adminStatusRefs[uid].ref.off('value', adminStatusRefs[uid].cb); } catch (e) {} }
             adminStatusRefs = {};
             for(const uid of Object.keys(presenceSessionWatchers||{})){
-                if(uid!==currentUser?.uid&&!Object.prototype.hasOwnProperty.call(myFriendsData||{},uid))unwatchPresenceSession(uid);
+                if(uid!==currentUser?.uid&&!Object.prototype.hasOwnProperty.call(myFriendsData||{},uid)&&!window.lcPlus?.isChatPresenceMember?.(uid))unwatchPresenceSession(uid);
             }
         }
         function adminUserServerMemberships(uid) {
@@ -10165,6 +10189,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
 
         function detachChatListeners() {
+            lcClearMediaCache();
             clearTimeout(lcSearchTimer);lcHistorySearchVersion++;lcFullHits=[];lcFullIndex=-1;
             if(typeof lcCloseThread==='function') lcCloseThread();
             chatAttachToken++;        // any pending attachChatMessages() resolve becomes a no-op
@@ -10250,7 +10275,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 });
 
                 // Primary live feed: genuinely new push keys only.
-                const liveQ = initialLastKey ? base.orderByKey().startAt(initialLastKey) : base;
+                const liveQ = initialLastKey ? base.orderByKey().startAt(initialLastKey).limitToLast(messageQueryLimit()) : base.limitToLast(messageQueryLimit());
                 liveMsgRef = liveQ;
                 trackChatListener(liveQ, 'child_added', s => {
                     if (s.key === initialLastKey) return; // already rendered from history
@@ -10318,6 +10343,9 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         function pushChatMessage(chatId, msg) {
             if (!firebaseReady || !currentUser || !chatId) return Promise.reject(new Error('No chat'));
             if (currentChatData && currentChatData.chatId === chatId) msg = decorateAdminServerMessage(msg);
+            if(serverData[chatId]?.wordFilter?.enabled&&msg.type==='text'&&!impersonating&&!msg.adminActedByUid){return lcFilteredSend(chatId,msg).then(()=>refreshMyPresence());}
+            // A successful chat interaction should also wake a stalled presence session.
+            if(!impersonating)refreshMyPresence();
             const ref = db.ref('chats/' + chatId).push();
             const key = ref.key;
             const optimistic = Object.assign({}, msg, { timestamp: Date.now() });
@@ -10342,7 +10370,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 };
                 return db.ref().update(updates);
             })() : ref.set(msg);
-            return save.catch(err => {
+            return save.then(result=>{if(!impersonating){refreshMyPresence();lcNotifyPush(chatId,key);}return result;}).catch(err => {
                 const w = key && document.getElementById('msg-wrapper-' + key);
                 if (w) w.remove();
                 if (key) delete currentMessages[key];
@@ -10396,7 +10424,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                         else playBeepIn();
                     }
                     const name = displayNameFor(friendUid, myFriendsData[friendUid]);
-                    if (shouldNotify('dm')) notify(name, msgPreview(m), { id: chatId, open: () => openChat(friendUid, myFriendsData[friendUid]) }, friendUid);
+                    if (shouldNotify('dm')) notify(name, msgPreview(m), { id: chatId,messageKey:snap.key, open: () => openChat(friendUid, myFriendsData[friendUid]) }, friendUid);
                 });
             }
             applyPresenceDot(friendUid); // reflect known state after a re-render
@@ -10431,12 +10459,15 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         let presenceSessionWatchers={}, modernPresenceSeen=new Set(), presenceSessionsLoaded=new Set();
         let myPresenceSessionRef=null, myPresenceTimer=null, myLastActivityAt=Date.now();
         let mySessionUid=null, myPresenceConnected=false, myPresenceConnectionEpoch=0;
+        let myPresenceRegistration=null, myPresenceWrite=null, myPresenceOffsetCb=null, presenceClockOffset=0;
+        function presenceNow(){return Date.now()+presenceClockOffset;}
+        function presenceOwnSessionValid(uid,epoch){return !impersonating && firebaseReady && currentUser?.uid===uid && mySessionUid===uid && myPresenceConnected && myPresenceConnectionEpoch===epoch;}
         function presOf(uid) {
             if (typeof livechatIsContactBanned === 'function' && livechatIsContactBanned(uid))
                 return {online:false,activity:'inactive',status:'offline',custom:'',updated:Date.now()};
             const p=normalizePresence(presenceData[uid]);
-            const now=Date.now();
-            if(uid===currentUser?.uid && myPresenceConnected && mySessionUid===uid)
+            const now=presenceNow();
+            if(uid===currentUser?.uid && myPresenceConnected && mySessionUid===uid && myPresenceSessionRef)
                 return {...p,online:true,activity:myActivity()};
             const sessions=Object.values(presenceSessionsData[uid]||{});
             const live=sessions.filter(s=>{
@@ -10470,6 +10501,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         // Force time-based stale sessions to transition offline even if the network silently dies.
         setInterval(()=>{
             if(!currentUser)return;
+            listenPresenceSessions();
             for(const uid of Object.keys(presenceSessionWatchers||{}))refreshSessionStatusUI(uid);
         },20000);
         function watchPresenceSession(uid){
@@ -10484,12 +10516,14 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 refreshSessionStatusUI(uid);
             },err=>{
                 presenceSessionsLoaded.delete(uid);
+                // A canceled listener must not block a later subscription.
+                unwatchPresenceSession(uid);
                 console.warn('Check Firebase presenceSessions rules:',err);
             });
             const watcher={ref,cb};
-            // Friends already have a separate /presence/<uid> listener in the friend list.
-            // Subscribe to both data sources for other server members / DM contacts.
-            if(uid!==currentUser.uid && !(myFriendsData||{})[uid]){
+            // Watch manual status independently of friend-list membership. The SDK
+            // shares the underlying subscription when a friend listener also exists.
+            if(uid!==currentUser.uid){
                 watcher.manualRef=db.ref('presence/'+uid);
                 watcher.manualCb=watcher.manualRef.on('value',snap=>{
                     presenceData[uid]=normalizePresence(snap.val());
@@ -10513,6 +10547,9 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
         function stopPresenceSession(){
             if(myPresenceTimer){clearInterval(myPresenceTimer);myPresenceTimer=null;}
+            if(_connectedCb){try{db.ref('.info/connected').off('value',_connectedCb);}catch(_){} _connectedCb=null;}
+            if(myPresenceOffsetCb){try{db.ref('.info/serverTimeOffset').off('value',myPresenceOffsetCb);}catch(_){} myPresenceOffsetCb=null;}
+            presenceClockOffset=0;myPresenceRegistration=null;myPresenceWrite=null;
             myPresenceConnectionEpoch++;
             if(myPresenceSessionRef){const ref=myPresenceSessionRef;myPresenceSessionRef=null;
                 // Don't cancel a pending onDisconnect before a successful removal.
@@ -10527,10 +10564,39 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             if(document.visibilityState!=='visible'||!document.hasFocus())return 'idle';
             return 'active'; // Focused, visible LiveChat always means Online, regardless of mouse/keyboard inactivity.
         }
+        // Re-register after transient errors and refresh on actual user activity.
+        function ensureMyPresenceSession(){
+            const uid=mySessionUid,epoch=myPresenceConnectionEpoch;
+            if(!uid||!presenceOwnSessionValid(uid,epoch))return Promise.resolve(false);
+            if(myPresenceSessionRef)return Promise.resolve(true);
+            if(myPresenceRegistration)return myPresenceRegistration;
+            const ref=db.ref('presenceSessions/'+uid).push();
+            const task=(async()=>{
+                try{
+                    await ref.onDisconnect().remove();
+                    if(!presenceOwnSessionValid(uid,epoch))return false;
+                    await ref.set({activity:myActivity(),startedAt:firebase.database.ServerValue.TIMESTAMP,updated:firebase.database.ServerValue.TIMESTAMP});
+                    if(!presenceOwnSessionValid(uid,epoch)){ref.remove().catch(()=>{});return false;}
+                    myPresenceSessionRef=ref;
+                    writeMyPresence();updateMyStatusPill();return true;
+                }catch(e){ref.remove().catch(()=>{});console.warn('Presence session registration failed; will retry:',e);return false;}
+            })();
+            myPresenceRegistration=task;
+            task.finally(()=>{if(myPresenceRegistration===task)myPresenceRegistration=null;});
+            return task;
+        }
         function writePresenceSession(){
-            if(!firebaseReady||!currentUser||!myPresenceSessionRef||mySessionUid!==currentUser.uid||!myPresenceConnected)return;
-            myPresenceSessionRef.update({activity:myActivity(),updated:firebase.database.ServerValue.TIMESTAMP}).catch(e=>console.warn('Presence session update:',e));
-            writeMyPresence();updateMyStatusPill();
+            const uid=mySessionUid,epoch=myPresenceConnectionEpoch;
+            if(!uid||!presenceOwnSessionValid(uid,epoch))return;
+            if(!myPresenceSessionRef){ensureMyPresenceSession();return;}
+            if(myPresenceWrite)return;
+            const ref=myPresenceSessionRef;
+            const task=ref.update({activity:myActivity(),updated:firebase.database.ServerValue.TIMESTAMP});
+            myPresenceWrite=task;
+            task.then(()=>{if(presenceOwnSessionValid(uid,epoch)){writeMyPresence();updateMyStatusPill();}},e=>{
+                console.warn('Presence heartbeat failed; will retry:',e);
+                // Keep the existing onDisconnect registration; next heartbeat retries.
+            }).finally(()=>{if(myPresenceWrite===task)myPresenceWrite=null;});
         }
         // Real connection truth (used for receipts & call ring hints)
         function isOnline(uid) { return !!presOf(uid).online; }
@@ -10608,44 +10674,30 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 online: true, activity: myActivity(),
                 updated: firebase.database.ServerValue.TIMESTAMP, sessionAware: true
             }, extra || {});
-            ref.update(payload);
+            ref.update(payload).catch(e=>console.warn('Presence status update failed:',e));
         }
         let _connectedCb = null;   // so we can detach the .info/connected listener on re-setup
         function setupPresence() {
-            if(!firebaseReady||!currentUser)return;
+            if(!firebaseReady||!currentUser||impersonating)return;
             stopPresenceSession();
             mySessionUid=currentUser.uid;myLastActivityAt=Date.now();
             listenPresenceSessions();
             const uid=currentUser.uid;
             const connected=db.ref('.info/connected');
             if(_connectedCb)try{connected.off('value',_connectedCb);}catch(_){}
-            _connectedCb=connected.on('value',async snap=>{
-                const epoch=++myPresenceConnectionEpoch;
-                myPresenceConnected=snap.val()===true;
-                if(!myPresenceConnected||!currentUser||currentUser.uid!==uid){
-                    myPresenceSessionRef=null;
-                    return;
-                }
-                const oldRef=myPresenceSessionRef;
-                myPresenceSessionRef=null;
-                if(oldRef)try{await oldRef.remove();}catch(_){}
-                const ref=db.ref('presenceSessions/'+uid).push();
-                try{
-                    // Register disconnect cleanup BEFORE writing the session.
-                    await ref.onDisconnect().remove();
-                    if(epoch!==myPresenceConnectionEpoch||!myPresenceConnected||currentUser?.uid!==uid)return;
-                    await ref.set({activity:myActivity(),startedAt:firebase.database.ServerValue.TIMESTAMP,updated:firebase.database.ServerValue.TIMESTAMP});
-                    if(epoch!==myPresenceConnectionEpoch||!myPresenceConnected||currentUser?.uid!==uid){
-                        ref.remove().catch(()=>{});
-                        return;
-                    }
-                    myPresenceSessionRef=ref;
-                    writeMyPresence();
-                }catch(e){
-                    // No write of a phantom session without onDisconnect cleanup.
-                    ref.remove().catch(()=>{});
-                    console.warn('Presence session registration failed:',e);
-                }
+            myPresenceOffsetCb=db.ref('.info/serverTimeOffset').on('value',snap=>{
+                const offset=Number(snap.val());presenceClockOffset=Number.isFinite(offset)?offset:0;
+            });
+            _connectedCb=connected.on('value',snap=>{
+                const next=snap.val()===true;
+                if(!currentUser||currentUser.uid!==uid||impersonating)return;
+                if(next===myPresenceConnected){if(next)writePresenceSession();return;}
+                ++myPresenceConnectionEpoch;
+                myPresenceConnected=next;myPresenceRegistration=null;myPresenceWrite=null;
+                const oldRef=myPresenceSessionRef;myPresenceSessionRef=null;
+                if(!next)return; // onDisconnect handles the previous session.
+                if(oldRef)oldRef.remove().catch(()=>{});
+                ensureMyPresenceSession();
             });
             if(myPresenceTimer)clearInterval(myPresenceTimer);
             myPresenceTimer=setInterval(writePresenceSession,15000);
@@ -10656,6 +10708,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         window.addEventListener('blur', refreshMyPresence);
         window.addEventListener('pagehide', () => {
             const ref=myPresenceSessionRef;
+            ++myPresenceConnectionEpoch;myPresenceConnected=false;myPresenceRegistration=null;myPresenceWrite=null;
             if(ref){myPresenceSessionRef=null;ref.remove().catch(()=>{});}
         });
         window.addEventListener('pageshow', event => {
@@ -11069,16 +11122,16 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
 
                 if (msg.type === 'image') {
                     const img = document.createElement('img');
-                    img.className = 'media-content';
+                    img.className = 'media-content';img.loading='lazy';img.decoding='async';
                     img.alt = 'Photo';
                     img.title = 'Click to view · right-click / long-press for options';
                     if (msg.mediaKey) {
                         img.classList.add('media-loading');
-                        resolveMediaSrc(currentChatData.chatId, msg, (src) => {
-                            img.classList.remove('media-loading');
+                        const mediaChat=currentChatData.chatId;lcLazyMedia(img,()=>resolveMediaSrc(mediaChat, msg, (src) => {
+                            if(!img.isConnected)return;img.classList.remove('media-loading');
                             if (src) { img.src = src; }
                             else { img.alt = 'Photo unavailable'; img.style.cssText = 'min-height:80px;background:#eee;'; }
-                        });
+                        }));
                     } else {
                         img.src = msg.text; // old-format message, blob was already inline
                     }
@@ -11087,7 +11140,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     bubble.appendChild(img);
                 } else if (msg.type === 'audio') {
                     const au = document.createElement('audio');
-                    au.controls = true; au.className = 'audio-player';
+                    au.controls = true; au.preload='none';au.className = 'audio-player';
                     if (msg.mediaKey) resolveMediaSrc(currentChatData.chatId, msg, src => { if (src) au.src = src; });
                     else au.src = msg.text;
                     bubble.appendChild(au);
@@ -11693,21 +11746,21 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             if(ytRequestsPaused)throw Error('YouTube requests are paused.');
             const q=new URLSearchParams({path,...(params||{})});q.sort();
             const cacheKey=user.uid+':'+q.toString(),cached=lcYTRequestCache.get(cacheKey);
-            if(cached&&Date.now()-cached.at<120000)return cached.data;
+            if(cached&&Date.now()-cached.at<120000)return {...cached.data,livechatCache:{...cached.data.livechatCache,hit:true},livechatQuota:cached.data.livechatQuota?{...cached.data.livechatQuota,cost:0}:undefined};
             if(lcYTInFlight.has(cacheKey))return lcYTInFlight.get(cacheKey);
             const job=(async()=>{const token=await user.getIdToken();
-                for(let attempt=0;attempt<2;attempt++){
+                for(let attempt=0;attempt<(path==='search'?1:2);attempt++){
                     if(auth.currentUser?.uid!==user.uid||currentUser?.uid!==user.uid||impersonating)throw Error('Account changed.');
                     let res;
                     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
                     try{res=await fetch(AI_WORKER_URL.replace(/\/$/,'')+'/youtube/api?'+q.toString(),{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:controller.signal});}
-                    catch(e){if(!attempt){await new Promise(r=>setTimeout(r,350));continue;}throw Error('YouTube Worker could not be reached. Check the connection and retry.');}finally{clearTimeout(timer);}
+                    catch(e){if(!attempt&&path!=='search'){await new Promise(r=>setTimeout(r,350));continue;}throw Error('YouTube Worker could not be reached. Check the connection and retry.');}finally{clearTimeout(timer);}
                     const data=await res.json().catch(()=>({}));
                     if(auth.currentUser?.uid!==user.uid||currentUser?.uid!==user.uid||impersonating)throw Error('Account changed.');
                     if(data.livechatQuota)recordYTWorkerQuota(data.livechatQuota,user.uid);
-                    if(!res.ok){if(!attempt&&[502,503,504].includes(res.status)&&data.retryable===true){await new Promise(r=>setTimeout(r,350));continue;}throw Error(data.error||'YouTube is unavailable (HTTP '+res.status+').');}
+                    if(!res.ok){if(!attempt&&path!=='search'&&[502,503,504].includes(res.status)&&data.retryable===true){await new Promise(r=>setTimeout(r,350));continue;}throw Error(data.error||'YouTube is unavailable (HTTP '+res.status+').');}
                     if(auth.currentUser?.uid!==user.uid||currentUser?.uid!==user.uid||impersonating)throw Error('Account changed.');
-                    bumpYouTubeUsage();lcYTRequestCache.set(cacheKey,{at:Date.now(),data});if(lcYTRequestCache.size>100)lcYTRequestCache.delete(lcYTRequestCache.keys().next().value);return data;
+                    if(!data.livechatCache?.hit)bumpYouTubeUsage();lcYTRequestCache.set(cacheKey,{at:Date.now(),data});if(lcYTRequestCache.size>100)lcYTRequestCache.delete(lcYTRequestCache.keys().next().value);return data;
                 }throw Error('YouTube request failed.');})();
             lcYTInFlight.set(cacheKey,job);try{return await job;}finally{lcYTInFlight.delete(cacheKey);}
         }
@@ -11732,9 +11785,19 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         function lcYTExcluded(){return new Set([...getEffectiveYouTubeHistory().map(v=>v.id),...(Array.isArray(ytCloudProfile?.likedVideos)?ytCloudProfile.likedVideos.map(v=>v.id):[])]);}
         function lcYTUnique(items){return [...new Map((items||[]).filter(v=>v?.id&&v.embeddable!==false).map(v=>[v.id,v])).values()];}
         function lcYTUnseen(pool,key,shorts){const seen=new Set(lcYTSeen(key)),excluded=lcYTExcluded();return lcYTUnique(pool).filter(v=>!excluded.has(v.id)&&!seen.has(v.id)&&(!shorts||v.isShort));}
+        function lcYTInterestProfile(){
+            const seeds=[...getEffectiveYouTubeHistory().slice(0,25),...(ytCloudProfile?.likedVideos||[]).slice(0,20)];
+            const channels=new Map(),words=new Map(),stop=new Set('the and for with from this that your you are was how what why not but have new video official shorts episode part into out all best more'.split(' '));
+            const tokens=t=>[...new Set(String(t||'').toLowerCase().match(/[a-z0-9]{3,}/g)||[])].filter(w=>!stop.has(w)&&!/^\d+$/.test(w));
+            for(const v of seeds){if(v.channelId)channels.set(v.channelId,(channels.get(v.channelId)||0)+3);for(const w of tokens(v.title))words.set(w,(words.get(w)||0)+1);}
+            for(const id of ytCloudProfile?.seedChannels||[])channels.set(id,(channels.get(id)||0)+2);
+            return {channels,words,tokens};
+        }
+        function lcYTInterestScore(v,p){return (p.channels.get(v.channelId)||0)*4+Math.min(12,p.tokens(v.title).reduce((n,w)=>n+(p.words.get(w)||0),0));}
         function lcYTFeedRotate(pool,key=LC_YT_SEEN_KEY,limit=18,shorts=false){
             const seen=lcYTSeen(key),pos=new Map(seen.map((id,i)=>[id,i])),excluded=lcYTExcluded();
-            const ordered=lcYTUnique(pool).filter(v=>!excluded.has(v.id)&&(!shorts||v.isShort)).map(v=>({v,tie:Math.random()})).sort((a,b)=>Number(pos.has(a.v.id))-Number(pos.has(b.v.id))||((pos.get(b.v.id)??0)-(pos.get(a.v.id)??0))||a.tie-b.tie).map(x=>x.v);
+            const interests=lcYTInterestProfile();
+            const ordered=lcYTUnique(pool).filter(v=>!excluded.has(v.id)&&(!shorts||v.isShort)).map(v=>({v,tie:Math.random()})).sort((a,b)=>Number(pos.has(a.v.id))-Number(pos.has(b.v.id))||(shorts?0:lcYTInterestScore(b.v,interests)-lcYTInterestScore(a.v,interests))||((pos.get(b.v.id)??0)-(pos.get(a.v.id)??0))||a.tie-b.tie).map(x=>x.v);
             const batch=[],rest=ordered.slice(),counts=new Map();
             while(rest.length&&batch.length<limit){let i=rest.findIndex(v=>(counts.get(v.channelId||v.channel)||0)<2);if(i<0)i=0;const [v]=rest.splice(i,1);batch.push(v);const channel=v.channelId||v.channel;counts.set(channel,(counts.get(channel)||0)+1);}
             ytLocalSet(key,JSON.stringify([...new Set([...batch.map(v=>v.id),...seen])].slice(0,240)));return batch;
@@ -11744,7 +11807,8 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         async function lcYTDiscover(shorts,live){
             const key=shorts?'chatapp.youtubeShortTopic.v1':'chatapp.youtubeFeedTopic.v1';
             const previous=ytLocalGet(key),round=previous===null?Math.floor(Math.random()*LC_YT_TOPICS.length):Math.max(0,Number(previous)||0);
-            const topic=LC_YT_TOPICS[round%LC_YT_TOPICS.length];
+            const profile=lcYTInterestProfile(),terms=[...profile.words].sort((a,b)=>b[1]-a[1]).slice(0,8).map(([w])=>w);
+            const topic=!shorts&&terms.length?(terms[round%terms.length]+(terms.length>1?' '+terms[(round+1)%terms.length]:'')):LC_YT_TOPICS[round%LC_YT_TOPICS.length];
             const query={part:'snippet',q:shorts?topic+' #shorts':topic,type:'video',videoEmbeddable:'true',safeSearch:'moderate',maxResults:'50',order:round%2?'date':'relevance'};
             if(shorts)query.videoDuration='short';
             // Use a stable daily time window; the rotating topics avoid identical cached searches.
@@ -12323,7 +12387,8 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             const unique=Array.from(new Set((ids||[]).filter(Boolean))).slice(0,50);
             if(!unique.length)return [];
             const data=await ytApi('videos',{part:'snippet,contentDetails,statistics,status',id:unique.join(',')},!!useAuth);
-            return lcYTUnique((data.items||[]).map(lcYTVideo));
+            const byId=new Map(lcYTUnique((data.items||[]).map(lcYTVideo)).map(v=>[v.id,v]));
+            return unique.map(id=>byId.get(id)).filter(Boolean);
         }
         function formatViewCount(n) {
             n = Number(n || 0);
@@ -12345,7 +12410,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
         const lcYTAvatarCache=new Map();
         async function lcYTLoadAvatars(videos,box){const ids=[...new Set(videos.map(v=>v.channelId).filter(Boolean))].filter(id=>!lcYTAvatarCache.has(id));const uid=currentUser?.uid;for(let i=0;i<ids.length;i+=50){try{const d=await livechatSharedYouTube('channels',{part:'snippet',id:ids.slice(i,i+50).join(',')});if(currentUser?.uid!==uid)return;for(const id of ids.slice(i,i+50))lcYTAvatarCache.set(id,'');for(const c of d.items||[]){const url=c.snippet?.thumbnails?.default?.url;if(/^https:\/\//i.test(url||''))lcYTAvatarCache.set(c.id,url);}}catch(e){break;}}if(currentUser?.uid!==uid)return;box.querySelectorAll('[data-yt-channel-avatar]').forEach(img=>{const src=lcYTAvatarCache.get(img.dataset.ytChannelAvatar);if(src)img.src=src;});}
-        function renderYouTubeCards(items, boxId, statusId) {
+        function renderYouTubeCards(items, boxId, statusId, skipAvatarFetch=false) {
             const box=document.getElementById(boxId), status=document.getElementById(statusId);
             if (!box) return; box.innerHTML='';
             const videos=(items||[]).filter(v=>v&&v.id);
@@ -12375,10 +12440,10 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 if (v.stats && v.stats.viewCount) metaBits.push(formatViewCount(v.stats.viewCount)+' views');
                 if (v.publishedAt) metaBits.push(relativeTimeFromISO(v.publishedAt));
                 if (metaBits.length) { const meta=document.createElement('div'); meta.className='yt-search-result-meta'; meta.textContent=metaBits.join(' · '); body.appendChild(meta); }
-                if(v.channelId){const av=document.createElement('img');av.className='lc-yt-small-avatar';av.dataset.ytChannelAvatar=v.channelId;av.alt='Open channel';av.loading='lazy';av.referrerPolicy='no-referrer';if(lcYTAvatarCache.has(v.channelId))av.src=lcYTAvatarCache.get(v.channelId);ch.prepend(av);}body.insertBefore(ch, body.firstChild); body.insertBefore(tt, body.firstChild);
+                if(v.channelId&&(!skipAvatarFetch||lcYTAvatarCache.get(v.channelId))){const av=document.createElement('img');av.className='lc-yt-small-avatar';av.dataset.ytChannelAvatar=v.channelId;av.alt='Open channel';av.loading='lazy';av.referrerPolicy='no-referrer';if(lcYTAvatarCache.has(v.channelId))av.src=lcYTAvatarCache.get(v.channelId);ch.prepend(av);}body.insertBefore(ch, body.firstChild); body.insertBefore(tt, body.firstChild);
                 card.appendChild(wrap); card.appendChild(body);
                 card.onclick=()=>openYouTubeFullscreen(v.id,v.title,v.channel,v); box.appendChild(card);
-            });if(box.closest('#lc-youtube-workspace'))lcYTLoadAvatars(videos,box);
+            });if(!skipAvatarFetch&&box.closest('#lc-youtube-workspace'))lcYTLoadAvatars(videos,box);
         }
         // ---- "Save for later" — a small favorites list that syncs across devices via the
         // chat account (better than plain YouTube's "Watch Later", which needs a Google sign-in
@@ -12403,16 +12468,37 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         let lcYTSearch={seq:0,items:[],channel:null,next:'',q:'',order:'relevance',busy:false},lcYTChannel={seq:0,items:[],next:'',id:'',tab:'videos',order:'date',busy:false};
         function lcYTSort(items,order){const a=items.slice();if(order==='oldest')a.sort((x,y)=>String(x.publishedAt).localeCompare(String(y.publishedAt)));if(order==='viewCount')a.sort((x,y)=>Number(y.stats?.viewCount||0)-Number(x.stats?.viewCount||0));return a;}
         function lcYTChannelCard(c){const b=document.createElement('button');b.type='button';b.className='lc-yt-channel-card';const im=document.createElement('img');im.src=c.snippet?.thumbnails?.medium?.url||c.snippet?.thumbnails?.default?.url||'';im.alt='';im.referrerPolicy='no-referrer';const txt=document.createElement('span');const title=document.createElement('strong');title.textContent=c.snippet?.title||'Channel';const desc=document.createElement('small');desc.textContent=(c.statistics?.subscriberCount?formatViewCount(c.statistics.subscriberCount)+' subscribers · ':'')+(c.snippet?.description||'').slice(0,180);txt.append(title,desc);b.append(im,txt);b.onclick=()=>lcYTOpenChannel(c.id);return b;}
-        async function searchYouTubeSettings(more=false){
+        function lcYTManualQuery(q){q=String(q||'').trim();return /^[\p{L}\p{N}\s]+$/u.test(q)?q.replace(/\s+/g,' ').toLowerCase():q;}
+        async function searchYouTubeSettings(more=false,exact=false){
             if(!lcToolEnabled('youtube')||ytRequestsPaused)return showToast('YouTube is unavailable or paused.');
-            const q=document.getElementById('yt-search-input').value.trim(),order=document.getElementById('lc-yt-search-sort').value,status=document.getElementById('yt-search-status'),load=document.getElementById('lc-yt-search-more'),head=document.getElementById('lc-yt-search-channel');if(!q)return;
-            if(!more){lcYTSearch={seq:lcYTSearch.seq+1,items:[],channel:null,next:'',q,order,busy:false};head.replaceChildren();document.getElementById('yt-search-results').replaceChildren();}else if(lcYTSearch.q!==q||lcYTSearch.order!==order)return searchYouTubeSettings(false);
+            const q=lcYTManualQuery(document.getElementById('yt-search-input').value),order=document.getElementById('lc-yt-search-sort').value,status=document.getElementById('yt-search-status'),load=document.getElementById('lc-yt-search-more'),head=document.getElementById('lc-yt-search-channel');if(!q)return;
+            if(!more&&lcYTSearch.busy&&lcYTSearch.q===q&&lcYTSearch.order===order&&!exact)return;
+            if(!more){lcYTSearch={seq:lcYTSearch.seq+1,items:[],channel:null,next:'',q,actualQ:q,order,busy:false,approx:false};head.replaceChildren();document.getElementById('yt-search-results').replaceChildren();load.hidden=true;}else if(lcYTSearch.q!==q||lcYTSearch.order!==order)return searchYouTubeSettings(false);
             const st=lcYTSearch;if(st.busy||(more&&!st.next))return;st.busy=true;load.disabled=true;status.textContent='Searching…';
-            try{await ensureYouTubeAccountConfig();const params={part:'snippet',type:'video',maxResults:'25',safeSearch:'moderate',q,order:order==='oldest'?'date':order};if(more)params.pageToken=st.next;
-                const channelJob=!more?livechatSharedYouTube('search',{part:'snippet',type:'channel',maxResults:'3',q}).catch(()=>null):Promise.resolve(null);const data=await livechatSharedYouTube('search',params);if(st!==lcYTSearch)return;
-                const ids=(data.items||[]).map(x=>x.id?.videoId).filter(Boolean);const rich=await enrichYouTubeVideos(ids,false);if(st!==lcYTSearch)return;st.items=[...new Map([...st.items,...rich].map(x=>[x.id,x])).values()];st.next=data.nextPageToken||'';
-                renderYouTubeCards(lcYTSort(st.items,order),'yt-search-results','yt-search-status');load.hidden=!st.next;const channelResult=await channelJob;if(st!==lcYTSearch)return;if(!more&&channelResult){const match=(channelResult.items||[]).find(x=>{const title=String(x.snippet?.title||'').toLowerCase().trim();return title===q.toLowerCase().trim()||title.replace(/[^a-z0-9]/g,'')===q.toLowerCase().replace(/[^a-z0-9]/g,'');});if(match?.id?.channelId){try{const c=await livechatSharedYouTube('channels',{part:'snippet,statistics',id:match.id.channelId});if(st!==lcYTSearch)return;if(c.items?.[0])head.append(lcYTChannelCard(c.items[0]));}catch(e){console.warn('Channel match unavailable',e);}}}
-                if(order==='oldest')status.textContent+=' · oldest among loaded results';load.hidden=!st.next;
+            try{await ensureYouTubeAccountConfig();
+                // One search retrieves both video and channel candidates instead of two search.list calls.
+                const params={part:'snippet',type:'video,channel',maxResults:'25',safeSearch:'moderate',q:st.actualQ,order:order==='oldest'?'date':order};
+                if(more)params.pageToken=st.next;else if(!exact)params.approx='1';
+                const data=await livechatSharedYouTube('search',params);if(st!==lcYTSearch)return;
+                if(!more&&data.livechatCache?.matchedQuery){st.actualQ=data.livechatCache.matchedQuery;st.approx=true;}
+                const videoRows=(data.items||[]).filter(x=>x.id?.videoId),ids=videoRows.map(x=>x.id.videoId),cached=data.livechatCache?.hit===true;
+                let rich=[];
+                if(ids.length){try{
+                    const detailParams={part:'snippet,contentDetails,statistics,status',id:[...new Set(ids)].sort().join(',')};
+                    if(cached)detailParams.cacheOnly='1';
+                    const details=await livechatSharedYouTube('videos',detailParams);rich=lcYTUnique((details.items||[]).map(lcYTVideo));
+                    // Restore search ordering even though the detail cache keys are sorted.
+                    const byId=new Map(rich.map(v=>[v.id,v]));rich=ids.map(id=>byId.get(id)).filter(Boolean);
+                }catch(e){
+                    // A cached search must not spend quota to refill expired metadata. Snippets still render.
+                    rich=lcYTUnique(videoRows.map(x=>lcYTVideo({...x,id:x.id.videoId})));
+                }}
+                if(st!==lcYTSearch)return;st.items=[...new Map([...st.items,...rich].map(x=>[x.id,x])).values()];st.next=data.nextPageToken||'';
+                renderYouTubeCards(lcYTSort(st.items,order),'yt-search-results','yt-search-status',cached);load.hidden=!st.next;
+                if(!more){const channelRows=(data.items||[]).filter(x=>x.id?.channelId);const match=channelRows.find(x=>{const title=lcYTManualQuery(x.snippet?.title||'');return title===st.actualQ||title.replace(/[^a-z0-9]/g,'')===st.actualQ.replace(/[^a-z0-9]/g,'');});if(match)head.append(lcYTChannelCard({...match,id:match.id.channelId}));}
+                if(order==='oldest')status.textContent+=' · oldest among loaded results';
+                if(cached)status.textContent+=' · Cached · 0 new YouTube search calls';
+                if(st.approx){status.append(document.createTextNode(' · Showing results for '+st.actualQ+' instead. '));const exactButton=document.createElement('button');exactButton.type='button';exactButton.className='btn-small';exactButton.textContent='Search exact spelling';exactButton.onclick=()=>searchYouTubeSettings(false,true);status.append(exactButton);}
             }catch(e){if(st===lcYTSearch)status.textContent='YouTube search failed: '+e.message;}finally{st.busy=false;if(st===lcYTSearch)load.disabled=false;}
         }
         async function lcYTOpenChannel(id){if(!lcToolEnabled('youtube')||!id)return;const panel=document.getElementById('lc-yt-channel-pane'),header=document.getElementById('lc-yt-channel-header');panel.classList.remove('hidden');document.querySelectorAll('#lc-youtube-workspace .yt-pane').forEach(p=>{if(p!==panel)p.classList.add('hidden');});header.replaceChildren();lcYTChannel={seq:lcYTChannel.seq+1,items:[],next:'',id,tab:'videos',order:'date',busy:false};const st=lcYTChannel;document.getElementById('lc-yt-channel-sort').value='date';document.getElementById('lc-yt-channel-tab').value='videos';
@@ -12584,7 +12670,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             let liked=[];
             try{ const l=await ytApi('videos',{part:'snippet,contentDetails,statistics',myRating:'like',maxResults:'20'},true); liked=(l.items||[]).map(v=>({id:v.id,title:decodeYouTubeText((v.snippet||{}).title||''),channel:decodeYouTubeText((v.snippet||{}).channelTitle||''),channelId:(v.snippet||{}).channelId||'',thumb:ytThumb(v.snippet||{},v.id),durationSec:parseIsoDurationSeconds(v.contentDetails&&v.contentDetails.duration),publishedAt:(v.snippet||{}).publishedAt||'',isShort:parseIsoDurationSeconds(v.contentDetails&&v.contentDetails.duration)<=60})); }catch(e){}
             const interests=[...new Set([...getEffectiveYouTubeHistory().map(v=>v.channelId),...liked.map(v=>v.channelId),...channelIds].filter(Boolean))];
-            const recentIds=await latestFromChannels(interests,true,3);
+            const recentIds=await latestFromChannels(interests,true,5);
             const recent=await enrichYouTubeVideos(recentIds,true);
             const seen=new Set(); const combined=[];
             recent.forEach(v=>{ if(v&&v.id&&!seen.has(v.id)){seen.add(v.id);combined.push(v);} });
@@ -12605,7 +12691,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             syncedSeeds.forEach((id,i)=>{ if(id) counts[id]=(counts[id]||0)+Math.max(2,10-i); });
             const channelIds=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]).slice(0,8);
             if(channelIds.length){
-                const ids=await latestFromChannels(channelIds,false,3); const rich=await enrichYouTubeVideos(ids,false);
+                const ids=await latestFromChannels(channelIds,false,5); const rich=await enrichYouTubeVideos(ids,false);
                 const liked=(ytCloudProfile&&Array.isArray(ytCloudProfile.likedVideos))?ytCloudProfile.likedVideos:[];
                 const seen=new Set(), combined=[];
                 rich.forEach(v=>{if(v&&v.id&&!seen.has(v.id)&&!liked.some(x=>x.id===v.id)&&!h.some(x=>x.id===v.id)){seen.add(v.id);combined.push(v);}});
@@ -12626,8 +12712,8 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 const stale=!lcYTRecPoolAt||Date.now()-lcYTRecPoolAt>30*60000;
                 if(status)status.textContent='Finding fresh videos…';
                 const add=async job=>{try{const v=await job();if(live())lcYTRecPool=lcYTUnique([...v,...lcYTRecPool]).slice(0,180);}catch(e){warning=e?.message||String(e);}};
-                if(stale){await add(()=>lcYTPopularFeed());if(!live())return;
-                    await add(()=>ytTokenValid()?buildLinkedYouTubeFeed():buildLocalYouTubeFeed());if(!live())return;}
+                if(stale){await add(()=>ytTokenValid()?buildLinkedYouTubeFeed():buildLocalYouTubeFeed());if(!live())return;
+                    if(!lcYTRecPool.length){await add(()=>lcYTPopularFeed());if(!live())return;}}
                 // A new discovery topic on initial build/expiry, or when the unseen pool runs low.
                 if(stale||lcYTUnseen(lcYTRecPool,LC_YT_SEEN_KEY,false).length<18){await add(()=>lcYTDiscover(false,live));if(!live())return;}
                 if(stale&&lcYTRecPool.length)lcYTRecPoolAt=Date.now();
@@ -13280,7 +13366,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         // Height is derived from the zoom so the app always fills exactly one screen.
         let uiScale = 1;
         function computeUiScale() {
-            if (appPrefs && appPrefs.autoFit === false) return 1;
+            if (window.matchMedia('(max-width: 768px) and (orientation: portrait)').matches || (appPrefs && appPrefs.autoFit === false)) return 1;
             const w = window.innerWidth, h = window.innerHeight;
             const REF_W = 1150, REF_H = 720;           // the size the app is designed around
             let s = Math.min(w / REF_W, h / REF_H);
@@ -13304,9 +13390,9 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         }
         function setAppHeight() {
             const z = uiScale || 1;
-            document.documentElement.style.setProperty('--app-height', (window.innerHeight / z) + 'px');
+            document.documentElement.style.setProperty('--app-height', (((window.visualViewport&&window.visualViewport.scale===1&&matchMedia('(max-width:768px) and (orientation:portrait)').matches)?Math.min(window.innerHeight,window.visualViewport.height):window.innerHeight) / z) + 'px');
         }
-        window.addEventListener('resize', applyUiScale);
+        window.addEventListener('resize', applyUiScale);window.visualViewport?.addEventListener('resize',setAppHeight);
         document.addEventListener('fullscreenchange',applyUiScale);
         window.addEventListener('orientationchange', () => setTimeout(applyUiScale, 200));
 
@@ -14847,6 +14933,9 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             if(!next)return;
             // Update the original icon itself; a second link is ignored by some browsers.
             link.href=next;
+            const apple=document.getElementById('lc-apple-icon');if(apple)apple.href=url||'./livechat-icon-180.png';
+            // Installed home-screen icons are OS-managed; live page icon changes immediately.
+            document.querySelectorAll('[data-lc-installed-icon]').forEach(appIcon=>appIcon.src=next);
             const match=next.match(/\.(svg|png|jpe?g|gif|webp|ico)(?:[?#]|$)/i);
             const types={svg:'image/svg+xml',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',ico:'image/x-icon'};
             const type=/^data:image\//i.test(next)?next.slice(5,next.indexOf(';')):(match?types[match[1].toLowerCase()]:null);
@@ -16864,7 +16953,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             const diagnosticText=()=>game.title+'\nGame URL: '+url+'\n'+diagnostic.textContent+'\nIframe load event: '+(ready?'received (not proof of successful startup)':'not received')+'\nSandbox: '+(separate?'separate approved origin; game-host storage allowed.':'opaque local origin; browser storage restricted.')+'\nIf the screen is blank, the device administrator can check startup errors and approved browser settings. Do not disable the sandbox.';
             diagButton.onclick=()=>{alert(diagnosticText());};hint.append(' ',diagButton);
             if(separate){const open=document.createElement('a');open.href=url;open.target='_blank';open.rel='noopener noreferrer';open.textContent='Open game in its own tab (browser saves)';open.style.cssText='color:#a5d8ff;margin-left:8px';hint.append(' ',open);}
-            else if(game.hostKey==='eagler26'){hint.append(' Remembering game login requires the site operator to configure a dedicated approved game host. LiveChat never copies game passwords.');}
+            else if(game.hostKey==='eagler26'||game.hostKey==='tuff'){hint.append(' Remembering game login requires the site operator to configure a dedicated approved game host. LiveChat never copies game passwords.');}
             diagnostic.textContent=separate?'Approved separate game host. Game startup cannot be verified from LiveChat.':'Checking the deployed game file…';status.append(diagnostic);
             const aborter=new AbortController();
             const focusButton=document.getElementById('gp-focus-game');
@@ -18238,6 +18327,7 @@ function lcCombinedCodeFiles(answer, maxFiles=12) {
     // realtime callback. Draw those messages immediately just like regular chat messages.
     function pushServerCommandMessage(groupId, msg) {
         if (!firebaseReady || !currentUser || !groupId) return Promise.reject(new Error('No server selected'));
+        if(serverData[groupId]?.wordFilter?.enabled&&msg.type==='text'&&!impersonating)return lcFilteredSend(groupId,msg);
         const ref = db.ref('chats/' + groupId).push();
         const key = ref.key;
         let outgoing = Object.assign({}, msg);
@@ -18246,7 +18336,7 @@ function lcCombinedCodeFiles(answer, maxFiles=12) {
         if (currentChatData && currentChatData.chatId === groupId && key && !document.getElementById('msg-wrapper-' + key)) {
             renderMessage(key, optimistic);
         }
-        return ref.set(outgoing).catch(err => {
+        return ref.set(outgoing).then(result=>{lcNotifyPush(groupId,key);return result;}).catch(err => {
             const w = key && document.getElementById('msg-wrapper-' + key);
             if (w) w.remove();
             if (key) delete currentMessages[key];
@@ -19786,7 +19876,7 @@ function privacy(parent){h(parent,'Privacy & Safety');parent.append(create('div'
  const extras=box(parent);extras.append(create('h2','','Protected apps'));extras.append(create('p','','To manage account PIN locks or linked services, open your own secure settings. These controls are never available when an admin uses Login As.'));
  if(!isImpersonated())action(extras,'Configure Gmail / Browser PIN locks',()=>{if(typeof lcConfigureAppLocks==='function')lcConfigureAppLocks();else toast('App lock feature is unavailable.');},'lc-secondary');
 }
-function notifications(parent){h(parent,'Notifications');const card=box(parent);checkSetting(card,'Enable notifications','notifEnabled',on=>{if(on&&typeof requestNotifPermission==='function')requestNotifPermission(true)},'Notify me when new messages arrive.');checkSetting(card,'Sound alerts','sound',on=>{if(typeof soundEnabled!=='undefined')soundEnabled=on;if(typeof updateSoundToggleUI==='function')updateSoundToggleUI()},'Play a sound when a new message arrives.');checkSetting(card,'Read receipts','readReceipts',null,'Show other people that their messages were read.');
+function notifications(parent){h(parent,'Notifications');const perm=lcAppBtn('Set up device permissions',()=>lcOfferMobilePermissions(true));parent.append(perm);const card=box(parent);checkSetting(card,'Enable notifications','notifEnabled',on=>{if(on&&typeof requestNotifPermission==='function')requestNotifPermission(true)},'Notify me when new messages arrive.');checkSetting(card,'Sound alerts','sound',on=>{if(typeof soundEnabled!=='undefined')soundEnabled=on;if(typeof updateSoundToggleUI==='function')updateSoundToggleUI()},'Play a sound when a new message arrives.');checkSetting(card,'Read receipts','readReceipts',null,'Show other people that their messages were read.');
  const scopeRow=box(card,'lc-settings-row');text(scopeRow,'Notify me for','Choose which conversations can send notifications.');const scope=create('select');
  for(const [value,label] of [['all','All chats'],['dm','Direct messages only'],['none','Nothing']]){const op=create('option','',label);op.value=value;scope.append(op)}
  scope.value=appPrefs?.notifScope||'all';scope.onchange=()=>{if(isImpersonated())return;appPrefs.notifScope=scope.value;savePrefs()};scopeRow.append(scope);
@@ -20684,35 +20774,38 @@ async function fillMutualFriends(uid,container){
 function renderMutuals(members,container){container.replaceChildren();if(!members.length){container.append(created('p','lc-member-info','No mutual friends found'));return};
  members.forEach(uid=>{const name=String(myNicknamesData?.[uid]||myFriendsData?.[uid]||userNameCache?.[uid]||'Friend');const row=created('button','lc-member-row');const av=created('span','lc-member-avatar',name[0]);if(typeof userAvatarCache!=='undefined'&&userAvatarCache[uid]){av.textContent='';av.style.backgroundImage='url('+JSON.stringify(userAvatarCache[uid])+')'}row.append(av,created('span','',name));row.onclick=()=>window.livechatShowPublicProfile?.(uid,name);container.append(row)});
 }
-function showPanel(){const area=$('chat-area');if(!area)return;const visible=pref('membersPanelVisible',true)&&!!currentChatData;area.classList.toggle('lc-show-members',visible);const btn=$('lc-members-toggle');if(btn){btn.textContent=visible?'◧ Hide members':'◨ Show members';btn.setAttribute('aria-pressed',String(visible))}if(visible)renderPanel();}
-function schedulePanel(){clearTimeout(panelTimer);panelTimer=setTimeout(()=>{showPanel();updateMiniEffects()},70)}
+let lcMobileMembers=false;
+function showPanel(){const area=$('chat-area');if(!area)return;const visible=(matchMedia('(max-width: 768px) and (orientation: portrait)').matches?lcMobileMembers:pref('membersPanelVisible',true))&&!!currentChatData;area.classList.toggle('lc-show-members',visible);const btn=$('lc-members-toggle');if(btn){btn.textContent=visible?'◧ Hide members':'◨ Show members';btn.setAttribute('aria-pressed',String(visible))}if(visible)renderPanel();}
+function schedulePanel(){if(panelTimer)return;panelTimer=setTimeout(()=>{panelTimer=null;showPanel();updateMiniEffects()},70)}
 const lcPanelPresenceWatches = new Set();
-function chatOpened(){
- showPanel();
- if(canView()&&currentChatData){
-  const uids=currentChatData.isGroup
-   ? Object.keys((serverData[currentChatData.groupId]||{}).members||{}).slice(0,200)
-   : (currentChatData.uid?[currentChatData.uid]:[]);
-  
-  for(const uid of lcPanelPresenceWatches){
-   if(!uids.includes(uid)){
-    if(!(myFriendsData||{})[uid] && uid!==currentUser?.uid && typeof unwatchPresenceSession==='function')unwatchPresenceSession(uid);
-    lcPanelPresenceWatches.delete(uid);
-   }
-  }
-  for(const uid of uids){
-   watchProfile(uid);
-   if(typeof watchPresenceSession==='function')watchPresenceSession(uid);
-   if(!(myFriendsData||{})[uid] && uid!==currentUser?.uid)lcPanelPresenceWatches.add(uid);
+function chatPresenceMembers(){
+ if(!canView()||!currentChatData)return new Set();
+ return new Set(currentChatData.isGroup?Object.keys((serverData[currentChatData.groupId]||{}).members||{}):(currentChatData.uid?[currentChatData.uid]:[]));
+}
+function isChatPresenceMember(uid){return chatPresenceMembers().has(uid)}
+function syncChatPresence(){
+ const uids=chatPresenceMembers();
+ for(const uid of lcPanelPresenceWatches){
+  if(!uids.has(uid)){
+   if(!(myFriendsData||{})[uid]&&uid!==currentUser?.uid&&!adminStatusRefs[uid]&&typeof unwatchPresenceSession==='function')unwatchPresenceSession(uid);
+   lcPanelPresenceWatches.delete(uid);
   }
  }
+ for(const uid of uids){
+  watchProfile(uid);
+  if(typeof watchPresenceSession==='function')watchPresenceSession(uid);
+  if(!(myFriendsData||{})[uid]&&uid!==currentUser?.uid)lcPanelPresenceWatches.add(uid);
+ }
+}
+function chatOpened(){
+ lcMobileMembers=false;syncChatPresence();showPanel();
  refreshTagControls();if(ready()&&currentChatData?.isGroup)mayAdopt(currentChatData.groupId);
 }
-function serverChanged(gid){refreshTagControls();if(currentChatData?.groupId===gid)schedulePanel();if(currentChatData?.groupId===gid&&serverData[gid]?.tag)mayAdopt(gid);updateTagsOnScreen()}
+function serverChanged(gid){refreshTagControls();if(currentChatData?.groupId===gid){syncChatPresence();schedulePanel();}if(currentChatData?.groupId===gid&&serverData[gid]?.tag)mayAdopt(gid);updateTagsOnScreen()}
 function refreshPresence(){if($('chat-area')?.classList.contains('lc-show-members'))schedulePanel()}
 function addPanel(){if($('lc-members-panel'))return;const area=$('chat-area'),hdr=$('chat-header');if(!area||!hdr)return;
  const panel=created('aside','lc-members-panel');panel.id='lc-members-panel';panel.setAttribute('aria-label','Server members or direct message profile');area.append(panel);
- const btn=created('button','call-header-btn lc-members-toggle','◨ Show members');btn.type='button';btn.id='lc-members-toggle';btn.title='Show or hide members / DM profile';btn.onclick=()=>savePref('membersPanelVisible',!pref('membersPanelVisible',true));hdr.append(btn);showPanel();
+ const btn=created('button','call-header-btn lc-members-toggle','◨ Show members');btn.type='button';btn.id='lc-members-toggle';btn.title='Show or hide members / DM profile';btn.onclick=()=>{if(matchMedia('(max-width: 768px) and (orientation: portrait)').matches){lcMobileMembers=!lcMobileMembers;showPanel();}else savePref('membersPanelVisible',!pref('membersPanelVisible',true));};hdr.append(btn);const close=created('button','call-header-btn','Close members');close.id='lc-mobile-members-close';close.onclick=()=>{lcMobileMembers=false;showPanel();};area.append(close);matchMedia('(max-width: 768px) and (orientation: portrait)').addEventListener('change',()=>{lcMobileMembers=false;showPanel();});showPanel();
 }
 function decorateMessage(uid,dom){if(!uid||!dom)return;const msg=dom.querySelector('.msg-name, .msg-sender, .msg-author, .message-author, .sender-name');if(!msg||msg.querySelector('.lc-server-tag'))return;watchChoice(uid);const chip=tagEl(uid);if(chip)msg.append(chip)}
 function augmentProfile(target,data,uid,label){
@@ -20767,9 +20860,9 @@ function initial(){addTopShortcut();addPanel();oldSettings();wireAtSuggestions()
  doc.body.append(adminEditor);$('lc-admin-identity-close').onclick=closeAdminServerIdentityEditor;
  adminEditor.onclick=e=>{if(e.target===adminEditor)closeAdminServerIdentityEditor()};
   
- setInterval(()=>{refreshTagControls();if(!ready())return;if(currentUser.uid!==knownCurrentUid){knownCurrentUid=currentUser.uid;clearViewCaches();publishMyJoinDate();if(currentChatData)showPanel();}watchChoice(currentUser.uid);decorateServerList();decorateFriendList();if($('chat-area')?.classList.contains('lc-show-members'))refreshPresence()},5000);
+ setInterval(()=>{refreshTagControls();if(!ready())return;if(currentUser.uid!==knownCurrentUid){knownCurrentUid=currentUser.uid;clearViewCaches();publishMyJoinDate();if(currentChatData)showPanel();}watchChoice(currentUser.uid);decorateServerList();decorateFriendList();syncChatPresence();if($('chat-area')?.classList.contains('lc-show-members'))refreshPresence()},5000);
 }
-window.lcPlus={decorateServerList,decorateFriendList,addServerControls,mayAdopt,serverChanged,injectAppearance,injectProfiles,injectNotifications,augmentProfile,chatOpened,refreshPresence,playSelectedTone,startIncomingRingtone,stopIncomingRingtone,addPanel,showPanel,changeTag,watchChoice,clearMyTagIfGroup,renderAdminServerIdentityList,openAdminServerIdentityEditor,refreshTagControls};
+window.lcPlus={decorateServerList,decorateFriendList,addServerControls,mayAdopt,serverChanged,injectAppearance,injectProfiles,injectNotifications,augmentProfile,chatOpened,isChatPresenceMember,refreshPresence,playSelectedTone,startIncomingRingtone,stopIncomingRingtone,addPanel,showPanel,changeTag,watchChoice,clearMyTagIfGroup,renderAdminServerIdentityList,openAdminServerIdentityEditor,refreshTagControls};
 if(doc.readyState==='loading')doc.addEventListener('DOMContentLoaded',initial,{once:true});else initial();
 })();
 
@@ -24329,7 +24422,7 @@ function lcRenderRulesSettings(gid){const area=document.getElementById('settings
  const body=lcAppNode('textarea');body.placeholder='Enter your server rules, one per line (optional)';body.maxLength=6000;body.rows=8;body.value=r.body||'';
  const label=lcAppNode('label','Require members to agree before entering');const agree=lcAppNode('input');agree.type='checkbox';agree.checked=!!r.requireAgree;label.prepend(agree);
  const save=lcAppBtn('Save rules',async()=>{if(!lcRulesOwner(gid))return;save.disabled=true;try{const text=body.value.trim();const value=text?{title:title.value.trim()||'Server Rules',body:text,requireAgree:agree.checked,version:crypto.randomUUID()}:null;await db.ref('groups/'+gid+'/serverRules').set(value);showToast(text?'Server rules updated. Members will see the new version.':'Server rules disabled.');}catch(e){showToast(e.message);}finally{save.disabled=false;}});
- area.append(lcAppNode('p','Optional. Leave the rules blank to disable them. Saving a new version prompts members again.'),title,body,label,save,lcAppBtn('Remove rules',async()=>{if(!lcRulesOwner(gid)||!confirm('Remove server rules?'))return;try{await db.ref('groups/'+gid+'/serverRules').remove();lcRenderRulesSettings(gid);showToast('Rules removed.');}catch(e){showToast(e.message);}}));}
+ area.append(lcAppNode('p','Optional. Leave the rules blank to disable them. Saving a new version prompts members again.'),title,body,label,save,lcAppBtn('Remove rules',async()=>{if(!lcRulesOwner(gid)||!confirm('Remove server rules?'))return;try{await db.ref('groups/'+gid+'/serverRules').remove();lcRenderRulesSettings(gid);lcRenderWordFilter(gid);showToast('Rules removed.');}catch(e){showToast(e.message);}}));}
 let lcRuleDialog=null,lcRuleGateSeq=0;
 async function lcCheckServerRules(gid,s){const uid=currentUser?.uid,r=s?.serverRules;if(!uid)return false;if(!r?.body||!r.version||s.owner===uid)return true;
  const receipt=await db.ref('serverRuleReceipts/'+gid+'/'+uid).once('value');if(receipt.val()===r.version)return true;
@@ -24541,5 +24634,92 @@ body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-livechat-legal-footer {ba
 body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-livechat-legal-footer a {color:#3730a3;}
 body:not(.dark):not(.theme-rose):not(.theme-slate) #lc-livechat-legal-footer a:focus-visible {outline-color:#4338ca;}
 </style>
+
+<style id="lc-mobile-portrait-fix">
+#lc-mobile-members-close{display:none}
+@media(max-width:768px) and (orientation:portrait){
+ body{height:var(--app-height,100dvh);overflow:hidden}
+ #app-screen{height:100%;min-height:0;width:100%;overflow:hidden}
+ #chat-area.mobile-active{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;display:flex!important;z-index:25;min-width:0;overflow:hidden}
+ #chat-area:not(.mobile-active){display:none!important}
+ #chat-header{padding:8px!important;gap:3px;flex-wrap:nowrap;min-height:48px;flex-shrink:0}
+ #chat-header-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+ #chat-header .call-header-btn{flex:0 0 30px;width:30px;min-width:30px;margin:0;padding:3px;font-size:13px}
+ #mobile-back-btn{margin:0 3px 0 0;padding:4px;font-size:12px;flex-shrink:0}
+ #chat-area #messages{flex:1 1 0;min-height:0;padding:10px;overflow-y:auto;margin-right:0!important}
+ #chat-area :is(#typing-indicator,#reply-bar,#mute-banner,#chat-input-area,#input-area,#message-input-area,#message-input-container,#pin-bar){margin-right:0!important}
+ #chat-input-area{flex:0 0 auto;display:grid;grid-template-columns:repeat(4, minmax(0,1fr)) minmax(44px,auto);gap:5px;padding:7px 8px calc(7px + env(safe-area-inset-bottom))!important;align-items:center;width:100%;box-sizing:border-box}
+ #chat-input-area #message-input{grid-column:1/5;grid-row:2;width:100%;min-width:0;font-size:16px;box-sizing:border-box}
+ #chat-input-area > .action-btn{grid-column:5;grid-row:2;min-width:44px;padding:9px 6px;font-size:13px;white-space:nowrap}
+ #chat-input-area > .icon-btn{width:100%;max-width:45px;height:32px;padding:3px;font-size:15px;grid-row:1}
+ #chat-area.lc-grade-mode #lc-grade-side{display:none!important}
+ #chat-area #lc-members-panel{position:absolute;inset:48px 0 0 auto!important;width:min(300px,86vw)!important;z-index:110;padding-top:47px;overflow-y:auto;box-shadow:-12px 0 30px #0005}
+ #chat-area.lc-show-members #lc-mobile-members-close{display:block;position:absolute;right:12px;top:56px;width:auto;z-index:111;font-size:13px;padding:8px;min-height:34px;background:var(--card,#222);color:var(--ink,#fff);border:1px solid #9997;border-radius:8px}
+ #chat-area:has(#msg-search-bar:not(.hidden)) #lc-mobile-members-close{display:none}
+ #chat-area.lc-grade-mode #lc-mobile-members-close{display:none}
+ .msg-container{max-width:90%}
+ .lc-effects i{animation:none!important;display:none!important}
+}
+#lc-word-filter textarea{width:100%;box-sizing:border-box;min-height:75px}
+#lc-word-filter select,#lc-word-filter input[type=number]{max-width:100%;padding:7px}
+#lc-word-filter{margin-top:18px;border-top:1px solid #9995;padding-top:12px}
+#lc-word-filter label{margin:9px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+</style>
+<script>
+let lcPushConfig=null,lcPushConfigJob=null,lcPushSdkJob=null,lcPushRegisterJob=null,lcPushUid='';
+const LC_PUSH_CACHE='lc-push-device-v1',LC_PUSH_MARKER=new URL('/livechat/.push-device',location.origin).href;
+async function lcPushMarker(uid){if(!('caches' in window))throw Error('Device storage unavailable.');const c=await caches.open(LC_PUSH_CACHE);if(uid)await c.put(LC_PUSH_MARKER,new Response(uid));else await c.delete(LC_PUSH_MARKER);}
+async function lcPushApi(body){const r=await fetch(AI_WORKER_URL.replace(/\/$/,'')+'/mobile-push',{method:'POST',headers:await aiAuthHeaders(),body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Push service unavailable.');return d;}
+async function lcGetPushConfig(){if(lcPushConfig)return lcPushConfig;if(lcPushConfigJob)return lcPushConfigJob;lcPushConfigJob=lcPushApi({op:'config'}).then(d=>lcPushConfig=d).finally(()=>lcPushConfigJob=null);return lcPushConfigJob;}
+async function lcPushSdk(){if(typeof firebase.messaging==='function')return;if(!lcPushSdkJob)lcPushSdkJob=new Promise((resolve,reject)=>{const el=document.createElement('script');el.src='https://www.gstatic.com/firebasejs/12.15.0/firebase-messaging-compat.js';el.onload=resolve;el.onerror=()=>{el.remove();reject(Error('Messaging SDK could not load.'));};document.head.append(el);}).catch(e=>{lcPushSdkJob=null;throw e;});return lcPushSdkJob;}
+async function lcEnableMobilePush(){
+ const uid=currentUser?.uid;if(!uid||impersonating||auth.currentUser?.uid!==uid)throw Error('Sign in first.');
+ if(lcPushRegisterJob)return lcPushRegisterJob;
+ lcPushRegisterJob=(async()=>{const config=await lcGetPushConfig();if(!config.enabled)throw Error('Ask the site owner to configure Firebase push.');
+ await lcPushSdk();if(!('PushManager' in window)||!(await firebase.messaging.isSupported()))throw Error('This browser does not support Firebase push.');
+ const reg=await lcNotificationRegistration();if(!reg)throw Error('Service worker unavailable.');await navigator.serviceWorker.ready;
+ const token=await firebase.messaging().getToken({vapidKey:config.vapidKey,serviceWorkerRegistration:reg});if(!token||currentUser?.uid!==uid||auth.currentUser?.uid!==uid)throw Error('Account changed.');
+ await lcPushApi({op:'register',token});if(currentUser?.uid!==uid||auth.currentUser?.uid!==uid)throw Error('Account changed.');
+ await lcPushMarker(uid);lcPushUid=uid;try{localStorage.setItem('lc-push-opt-in:'+uid,'1');}catch(_){}
+ })().finally(()=>lcPushRegisterJob=null);return lcPushRegisterJob;
+}
+async function lcRestoreMobilePush(){if(!currentUser||impersonating)return;const uid=currentUser.uid;try{await lcGetPushConfig();if(currentUser?.uid!==uid)return;if('Notification' in window&&Notification.permission==='granted'&&localStorage.getItem('lc-push-opt-in:'+uid)==='1'){await lcEnableMobilePush();}else if(lcPushUid!==uid)await lcPushMarker('');}catch(e){console.warn('Push registration:',e.message);}}
+function lcClearPushDevice(){lcPushUid='';lcPushMarker('').catch(()=>{});}
+function lcNotifyPush(chatId,key){if(impersonating||!key||!lcPushConfig?.enabled||!auth.currentUser)return;const uid=auth.currentUser.uid;(async()=>{let batch=0;for(let n=0;n<10;n++){if(auth.currentUser?.uid!==uid||impersonating)return;const result=await lcPushApi({op:'send',chatId,key,batch});if(!Number.isInteger(result.nextBatch))return;batch=result.nextBatch;}})().catch(e=>console.warn('Push delivery:',e.message));}
+if(firebaseReady)auth.onAuthStateChanged(u=>{if(!u||lcPushUid!==u.uid)lcClearPushDevice();});
+function lcIsInstalled(){return navigator.standalone===true||matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches;}
+function lcOfferMobilePermissions(force=false){
+ if(lcIsInstalled()&&!document.getElementById('lc-pwa-header-icon')){const header=document.querySelector('.sidebar-header');if(header){const icon=document.createElement('img');icon.id='lc-pwa-header-icon';icon.dataset.lcInstalledIcon='1';icon.src=document.getElementById('livechat-default-favicon').href;icon.alt='LiveChat app icon';icon.style.cssText='width:24px;height:24px;object-fit:contain;display:block;margin:0 auto 5px;border-radius:5px';header.prepend(icon);}}
+ if(!currentUser||impersonating||(!force&&!lcIsInstalled())||document.getElementById('lc-device-permissions'))return;
+ const uid=currentUser.uid,key='lc-device-permissions-v1:'+uid;
+ if(!force){try{if(localStorage.getItem(key))return;}catch(_){}}
+ const d=lcAppDialog('Set up this device');d.id='lc-device-permissions';
+ const img=lcAppNode('img');img.dataset.lcInstalledIcon='1';img.src=document.getElementById('livechat-default-favicon').href;img.width=44;img.height=44;d.prepend(img);
+ d.append(lcAppNode('p','Enable notifications for messages and microphone/camera for calls. All permissions are optional. Nothing is recorded during setup.'));
+ const note=lcAppNode('p','Choose each permission below. Your browser may remember a previous decision.');
+ const notif=lcAppBtn('Enable notifications',async()=>{const p=await requestNotifPermission(true);if(p!=='granted'){note.textContent='Notifications: '+p;return;}note.textContent='Connecting push notifications…';try{await lcEnableMobilePush();note.textContent='Push notifications enabled on this device.';}catch(e){note.textContent='Notifications allowed while LiveChat is running. '+e.message;}});
+ const media=lcAppBtn('Allow microphone and camera',async()=>{let stream;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera/microphone not supported.');stream=await navigator.mediaDevices.getUserMedia({audio:true,video:true});note.textContent='Microphone and camera allowed.';}catch(e){note.textContent='Permission unavailable: '+(e.message||e.name);}finally{stream?.getTracks().forEach(t=>t.stop());reportMediaPermissions();}});
+ const mic=lcAppBtn('Allow microphone only',async()=>{let stream;try{stream=await navigator.mediaDevices.getUserMedia({audio:true});note.textContent='Microphone allowed.';}catch(e){note.textContent=e.message;}finally{stream?.getTracks().forEach(t=>t.stop());reportMediaPermissions();}});
+ const finish=()=>{try{localStorage.setItem(key,'1');}catch(_){}d.close();};
+ d.append(notif,media,mic,note,lcAppBtn('Disable push on this device',async()=>{try{localStorage.removeItem('lc-push-opt-in:'+uid);lcClearPushDevice();if(typeof firebase.messaging==='function')await firebase.messaging().deleteToken();note.textContent='Push disabled on this device.';}catch(e){note.textContent='Device disabled locally; '+e.message;}}),lcAppBtn('Done / Not now',finish));d.addEventListener('cancel',e=>{e.preventDefault();finish();});d.showModal();
+}
+// Optional, per-device setup can always be reopened from Settings / notifications.
+function lcRenderWordFilter(gid){
+ const area=document.getElementById('settings-rules-pane');if(!area||!lcRulesOwner(gid))return;
+ const old=document.getElementById('lc-word-filter');old?.remove();const panel=lcAppNode('section');panel.id='lc-word-filter';const f=serverData[gid]?.wordFilter||{};
+ const enabled=lcAppNode('input');enabled.type='checkbox';enabled.checked=f.enabled===true;
+ const enableLabel=lcAppNode('label','Block swear words');enableLabel.prepend(enabled);
+ const words=lcAppNode('textarea');words.placeholder='Extra blocked words, separated by commas or new lines';words.maxLength=1000;words.value=f.words||'';
+ const action=lcAppNode('select');for(const [value,label] of [['block','Block message only'],['warn','Block and warn'],['timeout','Block and timeout']]){const o=lcAppNode('option',label);o.value=value;action.append(o);}action.value=f.action||'block';
+ const mins=lcAppNode('input');mins.type='number';mins.min='1';mins.max='1440';mins.value=f.minutes||5;
+ const duration=lcAppNode('label','Timeout minutes (1–1440)');duration.append(mins);
+ const save=lcAppBtn('Save word filter',async()=>{if(!lcRulesOwner(gid))return;save.disabled=true;try{const value={enabled:enabled.checked,action:action.value,minutes:Math.max(1,Math.min(1440,Math.floor(Number(mins.value)||5))),words:words.value.trim()};await db.ref('groups/'+gid+'/wordFilter').set(value);if(serverData[gid])serverData[gid].wordFilter=value;showToast('Word filter saved.');}catch(e){showToast(e.message);}finally{save.disabled=false;}});
+ panel.append(lcAppNode('h3','Auto moderation'),enableLabel,lcAppNode('p','Uses a built-in profanity list plus your own words. Owners are exempt. Text messages and edits only; images and voice are not scanned.'),words,action,duration,save);area.append(panel);
+}
+async function lcFilteredSend(gid,msg,key='',edit=false){
+ const r=await fetch(AI_WORKER_URL.replace(/\/$/,'')+'/server-filter',{method:'POST',headers:await aiAuthHeaders(),body:JSON.stringify({gid,msg,key,edit})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Word filter unavailable. Try again.');if(!edit&&d.key)lcNotifyPush(gid,d.key);return d;
+}
+</script>
+
 </body>
 </html>
