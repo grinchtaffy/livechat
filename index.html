@@ -1687,6 +1687,11 @@ body.dark #ai-workspace{background:#111318;color:#f3f4f6}body.dark .ai-main{back
 #lc-public-profile-modal .lc-profile-avatar{height:96px;width:96px;margin-top:-48px}
 #lc-public-profile-modal .lc-profile-details{padding:14px 20px 25px}
 #lc-public-profile-modal #lc-public-close{position:absolute;top:8px;right:8px;background:#15161bad;border:0;border-radius:50%;width:34px;height:34px;color:#fff;z-index:4;cursor:pointer;font-size:20px}
+#lc-public-profile-modal .lc-profile-server-role{margin-top:16px;display:grid;gap:6px;min-width:0}
+#lc-public-profile-modal .lc-profile-role-title{font-size:11px;color:#b8bfce;font-weight:700;overflow-wrap:anywhere}
+#lc-public-profile-modal .lc-profile-role-chip{display:inline-flex;align-items:center;gap:7px;justify-self:start;max-width:100%;box-sizing:border-box;border:1px solid #ffffff26;border-radius:7px;padding:5px 9px;background:#ffffff0d;color:#f5f6fa;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+#lc-public-profile-modal .lc-profile-role-dot{width:11px;height:11px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:12px;line-height:1}
+.lc-chat-profile-link{cursor:pointer}.lc-chat-profile-link:focus-visible{outline:2px solid #8b8dff;outline-offset:2px}
 #lc-public-profile-modal .lc-pop-actions{display:flex;gap:8px;margin-top:15px}
 #lc-public-profile-modal .lc-pop-actions button{padding:9px 15px;border:0;border-radius:7px;background:#5865f2;color:white;cursor:pointer;font-weight:600;min-height:36px}
 #lc-public-profile-modal .lc-pop-actions button:disabled{opacity:.65;cursor:default}
@@ -5796,7 +5801,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     renderServerSettings();
                     if (!document.getElementById('settings-roles-pane').classList.contains('hidden')) renderCustomServerRoles();
                 }
-                window.lcPlus?.serverChanged(groupId);lcRefreshBotButtons(groupId);
+                window.lcPlus?.serverChanged(groupId);lcRefreshBotButtons(groupId);window.lcRefreshPublicServerRole?.(groupId);
                 if(isSettingsOpenFor(groupId)&&!document.getElementById('settings-apps-pane').classList.contains('hidden'))lcAppList(groupId,document.getElementById('settings-apps-pane'),true);
             });
         }
@@ -7879,7 +7884,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             // Slash commands (servers only)
             if (!impersonating && currentChatData.isGroup && text.startsWith('/')) {
                 const cmdWord = text.slice(1).split(/\s+/)[0].toLowerCase();
-                if(lcRunAppCommand(text,currentChatData.groupId)){input.value='';hideMention();return;}
+                if(lcRunAppCommand(text,currentChatData.groupId)){input.value='';hideMention();const suggestions=document.getElementById('lc-slash-suggest');if(suggestions)suggestions.hidden=true;return;}
                 const adminCmds = ['ban','unban','banned','kick','mute','unmute','role','announce','insert'];
                 const everyoneCmds = ['help','me','shrug','roll'];
                 if (adminCmds.includes(cmdWord)) {
@@ -11054,12 +11059,19 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             bubble.className = 'msg ' + (isMe ? 'sent' : 'received');
             if (Array.isArray(msg.mentions) && msg.mentions.includes(currentUser.uid)) bubble.classList.add('lc-mentioned');
 
+            // Open a server-scoped public profile from a chat sender as well.
+            const senderGroup=currentChatData?.isGroup?currentChatData.groupId:null;
+            function bindSenderProfile(el){if(!senderGroup||!msg.sender||!serverData[senderGroup]?.members?.[msg.sender])return;
+                el.classList.add('lc-chat-profile-link');el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label','View server profile');
+                const open=e=>{e.stopPropagation();window.livechatShowPublicProfile?.(msg.sender,displayNameFor(msg.sender,msg.senderName),senderGroup);};
+                el.addEventListener('click',open);el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open(e);}});
+            }
             // Avatar for received messages (both 1:1 and group)
             if (!isMe && !(msg.unsent || msg.type === 'unsent')) {
                 const av = document.createElement('div');
                 av.className = 'msg-avatar';
                 paintAvatar(av, msg.sender, displayNameFor(msg.sender, msg.senderName));
-                wrapper.appendChild(av);
+                bindSenderProfile(av);wrapper.appendChild(av);
             }
 
             // Handle Media Types (No Storage)
@@ -11100,7 +11112,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                         if (msg.sender) ensureUserName(msg.sender, () => { sn.innerText = displayNameFor(msg.sender, msg.senderName); });
                     }
                     sn.style.display = 'inline';
-                    bubble.appendChild(sn);
+                    if(!msg.adminProxy&&!msg.adminOnBehalfOfUid)bindSenderProfile(sn);bubble.appendChild(sn);
                     if (msg.sender) {
                         const badgeSlot = document.createElement('span');
                         badgeSlot.className = 'lc-msg-tag-slot';
@@ -20068,11 +20080,32 @@ async function runProfileAction(ctx){
  }catch(e){if(profileActionActive(ctx))toast('Could not complete friend action. Please try again.');console.warn('Profile friend action:',e);}
  finally{ctx.busy='';if(profileActionActive(ctx))renderProfileAction(ctx);}
 }
-function openPublicProfile(uid,name){
+// Server role is scoped to the server from which the profile was opened.
+function lcProfileServerRole(gid,uid,viewer){
+ const server=gid&&serverData[gid];if(!server||!viewer||(!server.members?.[viewer]&&server.owner!==viewer))return null;
+ const member=server.members?.[uid];if(!member&&server.owner!==uid)return null;
+ if(server.owner===uid)return {name:'Owner',color:'#f0b232',crown:true};
+ if(member?.role==='admin')return {name:'Admin',color:'#ed8796'};
+ const custom=member?.customRole&&server.roleDefinitions?.[member.customRole];
+ if(custom&&typeof custom.name==='string'&&custom.name.trim())return {name:custom.name,color:/^#[0-9a-f]{6}$/i.test(custom.color||'')?custom.color:'#a8b3d3'};
+ return {name:'Member',color:'#a8b3d3'};
+}
+function lcPaintProfileServerRole(ctx){
+ const details=ctx?.wrap.querySelector('.lc-profile-details');if(!details)return;
+ details.querySelector('.lc-profile-server-role')?.remove();
+ if(!pass()||currentUser.uid!==ctx.owner||profileRequest!==ctx.seq||!ctx.gid||!pop.classList.contains('lc-show'))return;
+ const role=lcProfileServerRole(ctx.gid,ctx.uid,ctx.owner);if(!role)return;
+ const section=create('section','lc-profile-server-role');
+ const title=create('div','lc-profile-role-title','Role in '+(serverData[ctx.gid]?.name||'this server'));
+ const chip=create('span','lc-profile-role-chip');const dot=create('span','lc-profile-role-dot',role.crown?'👑':'');dot.style.backgroundColor=role.crown?'transparent':role.color;dot.setAttribute('aria-hidden','true');
+ chip.append(dot,create('span','',role.name));section.append(title,chip);details.append(section);
+}
+window.lcRefreshPublicServerRole=gid=>{const ctx=lcProfileActionContext;if(ctx?.gid===gid)lcPaintProfileServerRole(ctx);};
+function openPublicProfile(uid,name,gid=null){
  if(!pass()||!uid)return;
  closePublicProfile();const seq=++profileRequest,owner=currentUser.uid;const box=boxProfile();pop.classList.add('lc-show');
- const ctx={owner,uid,seq,wrap:box,subs:[],loaded:new Set(),failed:new Set(),friend:null,incoming:null,blocked:null,blockedByOther:null,sent:false,busy:''};lcProfileActionContext=ctx;
- const paint=data=>{if(!pass()||currentUser.uid!==owner||seq!==profileRequest)return;profileMarkup(box,data,uid,publicUsernameFor(uid,null,name||'User'));const close=create('button','','×');close.id='lc-public-close';close.type='button';close.setAttribute('aria-label','Close profile');close.onclick=closePublicProfile;box.append(close);addPublicActions(box,uid);};
+ const ctx={owner,uid,seq,gid,wrap:box,subs:[],loaded:new Set(),failed:new Set(),friend:null,incoming:null,blocked:null,blockedByOther:null,sent:false,busy:''};lcProfileActionContext=ctx;
+ const paint=data=>{if(!pass()||currentUser.uid!==owner||seq!==profileRequest)return;profileMarkup(box,data,uid,publicUsernameFor(uid,null,name||'User'));const close=create('button','','×');close.id='lc-public-close';close.type='button';close.setAttribute('aria-label','Close profile');close.onclick=closePublicProfile;box.append(close);lcPaintProfileServerRole(ctx);addPublicActions(box,uid);};
  paint({});startProfileActions(ctx);
  const ref=db.ref('userProfiles/'+uid),cb=s=>paint(s.val()||{});lcPopupProfileSub={ref,cb};ref.on('value',cb,e=>console.warn('Public profile unavailable:',e));
 }
@@ -20209,7 +20242,9 @@ window.livechatRenderSettings=renderSettings;
 #lc-members-panel{position:absolute;right:0;top:56px;bottom:0;width:232px;z-index:10;background:#191b22;border-left:1px solid #30333d;box-sizing:border-box;overflow:auto;display:none;padding:12px 9px 20px;box-shadow:-4px 0 18px #0001;color:#dce0e8;scrollbar-width:thin}
 #chat-area.lc-show-members #lc-members-panel{display:block}#lc-members-panel h3{font-size:12px;font-weight:700;text-transform:uppercase;color:#9298aa;margin:7px 2px 12px}
 #lc-members-panel h4{font-size:11px;text-transform:uppercase;margin:18px 3px 7px;color:#9ca3b9}.lc-member-row{display:flex;text-align:left;align-items:center;gap:9px;width:100%;border:0;background:transparent;color:inherit;padding:7px 4px;border-radius:8px;cursor:pointer;min-width:0}
-.lc-member-row:hover{background:#ffffff11}.lc-member-row.lc-offline{opacity:.47}.lc-member-avatar{position:relative;border-radius:50%;flex:0 0 35px;width:35px;height:35px}.lc-presence-dot{position:absolute;right:-2px;bottom:-2px;background:#747b88;width:11px;height:11px;border-radius:50%;border:2px solid #191b22;box-sizing:content-box}
+.lc-member-row:hover{background:#ffffff11}.lc-member-row.lc-offline{opacity:.47}
+#lc-members-panel .lc-member-row.lc-server-owner{opacity:1}.lc-server-owner .lc-owner-crown{display:inline-flex;align-items:center;justify-content:center;flex:0 0 16px;width:16px;height:16px;color:#d5a12b;filter:drop-shadow(0 0 1px #0003)}.lc-owner-crown svg{display:block;width:100%;height:100%;fill:currentColor}.lc-server-owner.lc-offline .lc-member-avatar{opacity:.65}
+.lc-member-avatar{position:relative;border-radius:50%;flex:0 0 35px;width:35px;height:35px}.lc-presence-dot{position:absolute;right:-2px;bottom:-2px;background:#747b88;width:11px;height:11px;border-radius:50%;border:2px solid #191b22;box-sizing:content-box}
 .lc-presence-dot.lc-online{background:#31c489}.lc-presence-dot.lc-idle{background:#efbf56}.lc-presence-dot.lc-dnd{background:#e8636b}.lc-presence-dot.lc-sleep{background:#8189c5}
 .lc-member-label{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.lc-member-head{display:flex;align-items:center;min-width:0;gap:4px}.lc-member-head b{font-size:12px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.lc-member-bio{font-size:10px;color:#8e95a4;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lc-member-info{color:#9aa0af;font-size:11px;margin:4px}.lc-dm-info{min-width:0}.lc-dm-banner{height:77px;border-radius:9px;margin-bottom:4px;background-size:cover;background-position:center}.lc-dm-bio{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;margin:7px 3px 12px}.lc-mutual-item{display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:12px;min-width:0;overflow-wrap:anywhere}.lc-mutual-item .lc-member-avatar{width:28px;height:28px;flex-basis:28px}.lc-members-toggle{font-size:11px!important;width:auto!important;min-width:42px!important;padding:6px!important;white-space:normal}
 .lc-tag-modal{position:fixed;inset:0;background:#04060aeb;z-index:16000;display:none;place-items:center;padding:14px;backdrop-filter:blur(8px)}.lc-tag-modal.lc-open{display:grid}.lc-tag-dialog{width:min(410px,95vw);padding:25px 23px 20px;border-radius:17px;background:#252730;color:#f7f8ff;box-shadow:0 25px 65px #0009;border:1px solid #5a6282;text-align:center}.lc-tag-dialog h2{font-size:20px;margin:15px 0}.lc-tag-hero{font-size:11px;letter-spacing:2px;color:#bbc2ff;font-weight:800}.lc-giant-tag{display:inline-flex;border:2px solid #9ca8ff;border-radius:11px;background:#39417b;color:#fff;font-size:29px;padding:12px 25px;letter-spacing:4px;font-weight:900}.lc-tag-dialog p{color:#bdc2d1;font-size:13px;line-height:1.5}.lc-tag-actions{display:flex;gap:10px;justify-content:center;margin-top:18px}.lc-tag-actions button{border:0;border-radius:8px;cursor:pointer;padding:12px 18px;background:#3e414d;color:#f1f1f5;font-weight:800;min-width:105px}.lc-tag-actions button:last-child{background:#5865f2}
@@ -20717,8 +20752,10 @@ window.lcRefreshClassicSettingsShortcut=oldSettings;
    }).observe(lcClassicSidebar,{childList:true});
  }
 
-function memberRow(uid,member,isGroup){const online=typeof visibleStatus==='function'?visibleStatus(uid):'offline';const user=(profileCache[uid]||{}), label=String((typeof displayNameFor==='function'&&displayNameFor(uid,member?.username))||member?.username||user.displayName||'Member');const el=created('button','lc-member-row '+(online==='offline'?'lc-offline':''));el.type='button';const av=created('span','lc-member-avatar',label[0].toUpperCase());if(typeof userAvatarCache!=='undefined'&&userAvatarCache[uid]){av.style.backgroundImage='url('+JSON.stringify(userAvatarCache[uid])+')';av.textContent=''};
- const dot=created('i','lc-presence-dot lc-'+online);av.dataset.lcMiniEffectUid=uid;av.append(dot);const content=created('span','lc-member-label');const head=created('span','lc-member-head');const name=created('b','',label);name.dataset.lcLiveProfileName=uid;head.append(name);const slot=created('span','lc-tag-slot');slot.dataset.lcTagUid=uid;const chip=tagEl(uid);if(chip)slot.append(chip);head.append(slot);content.append(head);const bio=created('small','lc-member-bio',String(user.bio||'').trim()||' ');bio.dataset.lcBioUid=uid;content.append(bio);el.append(av,content);el.title=label+' · '+online;el.onclick=()=>{if(typeof window.livechatShowPublicProfile==='function')window.livechatShowPublicProfile(uid,label)};watchChoice(uid);watchProfile(uid);return el}
+function lcSortServerMembers(s){return Object.entries(s.members||{}).sort((a,b)=>{const ownerOrder=Number(b[0]===s.owner)-Number(a[0]===s.owner);if(ownerOrder)return ownerOrder;const ao=typeof visibleStatus==='function'?visibleStatus(a[0])!=='offline':false,bo=typeof visibleStatus==='function'?visibleStatus(b[0])!=='offline':false;return Number(bo)-Number(ao)});}
+function lcOwnerCrown(){const crown=created('span','lc-owner-crown');crown.title='Server owner';crown.setAttribute('role','img');crown.setAttribute('aria-label','Server owner');crown.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 5.5 8.1 10 12 3l3.9 7L21 5.5 18.5 18h-13L3 5.5ZM5.5 20h13v2h-13z"/></svg>';return crown;}
+function memberRow(uid,member,isGroup,isOwner=false){const online=typeof visibleStatus==='function'?visibleStatus(uid):'offline';const user=(profileCache[uid]||{}), label=String((typeof displayNameFor==='function'&&displayNameFor(uid,member?.username))||member?.username||user.displayName||'Member');const el=created('button','lc-member-row '+(online==='offline'?'lc-offline':'')+(isGroup&&isOwner?' lc-server-owner':''));el.type='button';const av=created('span','lc-member-avatar',label[0].toUpperCase());if(typeof userAvatarCache!=='undefined'&&userAvatarCache[uid]){av.style.backgroundImage='url('+JSON.stringify(userAvatarCache[uid])+')';av.textContent=''};
+ const dot=created('i','lc-presence-dot lc-'+online);av.dataset.lcMiniEffectUid=uid;av.append(dot);const content=created('span','lc-member-label');const head=created('span','lc-member-head');const name=created('b','',label);name.dataset.lcLiveProfileName=uid;head.append(name);if(isGroup&&isOwner)head.append(lcOwnerCrown());const slot=created('span','lc-tag-slot');slot.dataset.lcTagUid=uid;const chip=tagEl(uid);if(chip)slot.append(chip);head.append(slot);content.append(head);const bio=created('small','lc-member-bio',String(user.bio||'').trim()||' ');bio.dataset.lcBioUid=uid;content.append(bio);el.append(av,content);el.title=label+(isGroup&&isOwner?' · Server owner':'')+' · '+online;el.onclick=()=>{if(typeof window.livechatShowPublicProfile==='function')window.livechatShowPublicProfile(uid,label,isGroup?currentChatData?.groupId:null)};watchChoice(uid);watchProfile(uid);return el}
 function openFullDMBanner(src,person){
  
  
@@ -20738,9 +20775,9 @@ function openFullDMBanner(src,person){
  modal.querySelector('.lc-dm-banner-viewer-close')?.focus();
 }
 function renderPanel(){const panel=$('lc-members-panel');if(!panel)return;panel.replaceChildren();if(!canView()||!currentChatData)return;
- if(currentChatData.isGroup){const s=serverData[currentChatData.groupId]||{},list=Object.entries(s.members||{}).sort((a,b)=>{const ao=typeof visibleStatus==='function'?visibleStatus(a[0])!=='offline':false,bo=typeof visibleStatus==='function'?visibleStatus(b[0])!=='offline':false;return Number(bo)-Number(ao)});
+ if(currentChatData.isGroup){const s=serverData[currentChatData.groupId]||{},list=lcSortServerMembers(s);
  const active=list.filter(([uid])=>typeof visibleStatus==='function'&&visibleStatus(uid)!=='offline');panel.append(created('h3','','Members — '+list.length));if(s.tag){const info=created('p','lc-member-info','Server tag: ['+s.tag+']');panel.append(info)};
- for(const [uid,m] of list)panel.append(memberRow(uid,m,true));lcAddBotMembers(panel,currentChatData.groupId);
+ for(const [uid,m] of list)panel.append(memberRow(uid,m,true,uid===s.owner));lcAddBotMembers(panel,currentChatData.groupId);
  }else{const uid=currentChatData.uid;if(!uid)return;const p=profileCache[uid]||{};
  panel.append(created('h3','','Profile'));const hero=created('div','lc-dm-info');hero.append(memberRow(uid,{username:currentChatData.name},false));
   const banner=created('div','lc-dm-banner');banner.style.backgroundColor=/^#[0-9a-f]{6}$/i.test(String(p.bannerColor||''))?p.bannerColor:'#5865f2';
@@ -24440,7 +24477,7 @@ async function lcCheckServerRules(gid,s){const uid=currentUser?.uid,r=s?.serverR
 async function lcServerEntry(gid,proceed){const seq=++lcRuleGateSeq,uid=currentUser?.uid;try{const s=(await db.ref('groups/'+gid).once('value')).val();if(!s||currentUser?.uid!==uid||seq!==lcRuleGateSeq)return;const yes=await lcCheckServerRules(gid,s);if(yes&&seq===lcRuleGateSeq&&currentUser?.uid===uid)await proceed(s);else if(!yes&&seq===lcRuleGateSeq){if(currentChatData?.groupId===gid){detachChatListeners();detachServerCallWatch();closeMobileChat();document.getElementById('messages').replaceChildren();document.getElementById('chat-area').classList.add('hidden');}showToast('Server rules not accepted. You can try again later.');}}catch(e){showToast('Could not open server: '+e.message);}}
 // Only the current role's usable commands, including installed apps. /help itself isn't counted.
 function lcAvailableCommands(gid){if(!gid)return [];const base=COMMANDS.filter(c=>{const cmd=c.s.split(/[\s<]/)[0];if(cmd==='/help')return false;if(['/me','/shrug','/roll'].includes(cmd))return lcCanBasicCommands(gid);if(cmd==='/role')return getMyRole(gid)==='owner';return canServerModerate(gid);});
- base.push({s:'/apps',d:lcCanManageApps(gid)?'Browse and install server apps.':'Browse server apps.'});for(const [,a] of lcInstalled(gid))for(const cmd of a.commands){const i=base.findIndex(x=>x.s.split(/[\s<]/)[0]==='/'+cmd);if(i>=0)base.splice(i,1);base.push({s:'/'+cmd,d:a.name+' — '+a.desc});}return base;}
+ base.push({s:'/apps',d:lcCanManageApps(gid)?'Browse and install server apps.':'Browse server apps.'});for(const [,a] of lcInstalled(gid))for(const cmd of a.commands){const i=base.findIndex(x=>x.s.split(/[\s<]/)[0]==='/'+cmd);if(i>=0)base.splice(i,1);base.push({s:cmd==='ship'?'/ship <user1> <user2>':cmd==='marry'?'/marry <user>':'/'+cmd,d:cmd==='marry'?'Propose to a member, or use /marry accept <user>.':a.name+' — '+a.desc});}return base;}
 
 const lcShipRenderCache=new Map();
 function lcShipFallbackLabel(name){const clean=String(name||'').trim();return (clean[0]||'?').toUpperCase();}
@@ -24473,9 +24510,9 @@ async function lcRenderShipImage(msg,imgEl){
  const data=canvas.toDataURL('image/png'); lcShipRenderCache.set(key,data);while(lcShipRenderCache.size>24)lcShipRenderCache.delete(lcShipRenderCache.keys().next().value); imgEl.src=data;
 }
 
-function lcRunAppCommand(text,gid){const m=text.match(/^\/([a-z-]+)(?:\s+([\s\S]*))?$/i);if(!m)return false;const cmd=m[1].toLowerCase(),args=m[2]||'';if(cmd==='apps'){lcOpenApps(gid);return true;}const installed=lcInstalled(gid).find(([,a])=>a.commands.includes(cmd));if(!installed)return false;
+function lcRunAppCommand(text,gid){const m=text.match(/^\/([a-z-]+)(?:\s+([\s\S]*))?$/i);if(!m)return false;const cmd=m[1].toLowerCase(),args=m[2]||'';if(cmd==='apps'){lcOpenApps(gid);return true;}const installed=lcInstalled(gid).find(([,a])=>a.commands.includes(cmd));const app=installed?.[0]||(['ship','marry'].includes(cmd)?'matchmaker':null);if(!app)return false; // Worker checks current installation, even if local server data is still syncing.
  if(amIMuted(gid)){showToast('You are muted in this server.');return true;}if(!amIMemberOf(gid)){showToast('You are no longer a member.');return true;}
- lcAppRequest(gid,cmd,args,installed[0]).catch(e=>showToast(e.message));return true;}
+ lcAppRequest(gid,cmd,args,app).catch(e=>showToast(e.message));return true;}
 function lcAppInvocationLine(msg){
  const who=msg.appInvokerName,command=msg.appInvokedCommand;
  if(typeof who!=='string'||!who.trim()||typeof command!=='string'||!command)return null;
@@ -24496,12 +24533,24 @@ function lcRenderAppMessage(key,msg){const app=LC_SERVER_APPS[msg.botApp];if(!ap
  wrap.append(av,content);const box=document.getElementById('messages');box.append(wrap);box.scrollTop=box.scrollHeight;return true;}
 function lcRefreshBotButtons(gid){if(currentChatData?.groupId!==gid)return;for(const [key,m] of Object.entries(currentMessages||{})){if(!m?.botApp||!m.hasAnswer)continue;const w=document.getElementById('msg-wrapper-'+key);if(!w)continue;const should=!m.answerRevealed&&lcCanManageApps(gid)&&serverData[gid]?.installedApps?.[m.botApp];const old=w.querySelector('.lc-reveal-answer');if(!should&&old)old.remove();else if(should&&!old){const c=w.querySelector('.lc-app-message-content');if(c){const b=lcAppBtn('View answer',async()=>{b.disabled=true;try{await lcAppRequest(gid,'reveal','',m.botApp,key);}catch(e){b.disabled=false;showToast(e.message);}});b.className='lc-reveal-answer';c.append(b);}}}}
 function lcAddBotMembers(panel,gid){const entries=lcInstalled(gid);if(!entries.length)return;panel.append(lcAppNode('h3','Apps — '+entries.length));for(const [id,a] of entries){const row=lcAppNode('div',undefined,'lc-app-member');row.append(lcAppNode('span','🟢 '+a.icon),lcAppNode('strong',a.name),lcAppNode('span','APP','lc-app-tag'));panel.append(row);}}
+function lcMatchmakerSuggestions(gid,val){
+ const [word,...args]=val.split(/\s+/),cmd=word.toLowerCase(),partial=args.pop()||'',prefix=args;
+ if(cmd==='/ship'&&prefix.length>1||cmd==='/marry'&&(prefix.length>1||prefix.length===1&&prefix[0].toLowerCase()!=='accept'))return [];
+ const norm=x=>String(x||'').replace(/^@/,'').toLowerCase();
+ const members=Object.entries(serverData[gid]?.members||{}).filter(([id,m])=>m?.username&&!serverData[gid]?.banned?.[id]&&(cmd==='/ship'||id!==currentUser.uid));
+ const exact=members.some(([,m])=>norm(m.username)===norm(partial));
+ // Fully typed final arguments should be sent normally, not consumed by autocomplete.
+ if(exact&&(cmd==='/marry'&&!(prefix.length===0&&partial.toLowerCase()==='accept')||cmd==='/ship'&&prefix.length===1))return [];
+ const out=members.filter(([,m])=>norm(m.username).startsWith(norm(partial))&&!(cmd==='/ship'&&prefix.length&&norm(m.username)===norm(prefix[0]))).map(([,m])=>({value:[cmd,...prefix,m.username].join(' '),label:m.username+' · Member'}));
+ if(cmd==='/marry'&&!prefix.length&&'accept'.startsWith(partial.toLowerCase()))out.unshift({value:'/marry accept',label:'/marry accept · Accept a proposal'});
+ return out.slice(0,12);
+}
 function lcWireSlashAutocomplete(){const input=document.getElementById('message-input');if(!input)return;const box=lcAppNode('div',undefined,'lc-at-suggest');box.id='lc-slash-suggest';box.hidden=true;input.parentElement.append(box);let choices=[],index=0;
  function pick(i){if(!choices[i])return;input.value=choices[i].value+' ';box.hidden=true;choices=[];input.focus();input.dispatchEvent(new Event('input',{bubbles:true}));}
  function draw(){box.replaceChildren();choices.forEach((c,i)=>{const b=lcAppBtn(c.label,()=>pick(i));b.className='lc-at-choice'+(i===index?' active':'');b.onmousedown=e=>e.preventDefault();box.append(b);});box.hidden=!choices.length;}
  input.addEventListener('input',()=>{const gid=currentChatData?.groupId,val=input.value;choices=[];index=0;if(gid&&/^\/[a-z-]*$/i.test(val)){choices=[{s:'/help',d:'Show your available commands'},...lcAvailableCommands(gid)].filter(c=>c.s.toLowerCase().startsWith(val.toLowerCase())).map(c=>({value:c.s.split(/[\s<]/)[0],label:c.s+' · '+c.d})).slice(0,15);}
- else if(gid&&/^\/(ban|kick|mute|unmute|role|duel|marry)\s+@?[^\s]*$/i.test(val)){const [word,partial='']=val.split(/\s+/);const allowed=lcAvailableCommands(gid).some(c=>c.s.split(/[\s<]/)[0]===word);if(allowed){choices=Object.entries(serverData[gid]?.members||{}).filter(([id,m])=>id!==currentUser.uid&&(word==='/duel'||word==='/marry'||id!==serverData[gid].owner)&&String(m.username||'').toLowerCase().startsWith(partial.replace(/^@/,'').toLowerCase())).map(([,m])=>({value:word+' '+m.username,label:m.username+' · Member'})).slice(0,12);}}
- else if(gid&&/^\/ship\s+@?\S*\s+@?[^\s]*$/i.test(val)){const parts=val.split(/\s+/);const word=parts[0],first=parts[1]||'',partial=parts[2]||'';const allowed=lcAvailableCommands(gid).some(c=>c.s.split(/[\s<]/)[0]===word);if(allowed){const taken=first.replace(/^@/,'').toLowerCase();choices=Object.entries(serverData[gid]?.members||{}).filter(([id,m])=>String(m.username||'').toLowerCase()!==taken&&String(m.username||'').toLowerCase().startsWith(partial.replace(/^@/,'').toLowerCase())).map(([,m])=>({value:word+' '+first+' '+m.username,label:m.username+' · Member'})).slice(0,12);}}
+ else if(gid&&/^\/(ship|marry)\s/i.test(val)&&serverData[gid]?.installedApps?.matchmaker===true){choices=lcMatchmakerSuggestions(gid,val);}
+ else if(gid&&/^\/(ban|kick|mute|unmute|role|duel)\s+@?[^\s]*$/i.test(val)){const [word,partial='']=val.split(/\s+/);const allowed=lcAvailableCommands(gid).some(c=>c.s.split(/[\s<]/)[0]===word);if(allowed){choices=Object.entries(serverData[gid]?.members||{}).filter(([id,m])=>id!==currentUser.uid&&(word==='/duel'||id!==serverData[gid].owner)&&String(m.username||'').toLowerCase().startsWith(partial.replace(/^@/,'').toLowerCase())).map(([,m])=>({value:word+' '+m.username,label:m.username+' · Member'})).slice(0,12);}}
  draw();if(!box.hidden){hideMention();const at=document.getElementById('lc-at-suggest');if(at)at.hidden=true;}});
  input.addEventListener('keydown',e=>{if(box.hidden||!choices.length)return;if(!currentChatData?.isGroup){box.hidden=true;return;}if(['Tab','Enter','ArrowDown','ArrowUp','Escape'].includes(e.key)){e.preventDefault();e.stopImmediatePropagation();if(e.key==='Escape'){box.hidden=true;return;}if(e.key==='Tab'||e.key==='Enter'){pick(index);return;}index=(index+(e.key==='ArrowDown'?1:-1)+choices.length)%choices.length;draw();}},true);
  input.addEventListener('blur',()=>setTimeout(()=>{box.hidden=true;},120));}
