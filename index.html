@@ -4331,7 +4331,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     }
                     if(new URLSearchParams(location.search).get('lcBrowserReturn')==='1'){
                         try{localStorage.setItem('lc:welcome:done:'+user.uid,'1');await db.ref('users/'+user.uid+'/welcomeTutorialPending').set(false);}catch(e){}
-                        location.replace(new URL('GUSt.html',location.href).href);return;
+                        location.replace('https://grinchtaffy.github.io/proxy/');return;
                     }
                     // A listener handles admins banning someone WHILE they are signed in.
                     if (typeof livechatWatchOwnBan === 'function') livechatWatchOwnBan(user.uid);
@@ -18666,7 +18666,7 @@ function lcToolScaffold(key,title) {
 function openLivechatTool(key) {
   if(key==='legacySettings'){ if(window.livechatOpenLegacySettings)return window.livechatOpenLegacySettings();return; }
   if(impersonating && (key==='email'||key==='browser'||key==='watchHistory')){showToast('Linked or protected apps cannot be opened in Login As.');return;}
-  if(key==='livechatBrowser'){if(!lcToolEnabled(key))return showToast('LiveChat Browser is not available for this account.');window.open(new URL('GUSt.html',location.href).href,'_blank','noopener');return;}
+  if(key==='livechatBrowser'){if(!lcToolEnabled(key))return showToast('LiveChat Browser is not available for this account.');window.open('https://grinchtaffy.github.io/proxy/','_blank','noopener');return;}
   if(key==='browser')return lcOpenBrowser();
   if(key==='htmlRunner')return lcOpenRunner();
   if(key==='watchHistory')return lcShowWatchHistory();
