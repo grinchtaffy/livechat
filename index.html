@@ -4000,6 +4000,16 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             }finally{livechatSignupInFlight=false}
         }
 
+        if(new URLSearchParams(location.search).get('lcBrowserReturn')==='1'){const note=document.createElement('div');note.setAttribute('role','status');note.textContent='LiveChat Browser: log in or create an account. You will automatically return to the browser when setup is complete.';note.style.cssText='padding:12px;margin:8px 0;background:#e0f2fe;color:#0c4a6e;border-radius:10px;font-weight:600;';document.getElementById('lc-auth-heading')?.after(note);}
+        function lcBrowserSignupNotice(){
+            if(new URLSearchParams(location.search).get('lcBrowserReturn')!=='1'||document.getElementById('lc-browser-signup-notice'))return;
+            const dialog=document.createElement('dialog');dialog.id='lc-browser-signup-notice';dialog.style.cssText='max-width:min(400px,90vw);border:1px solid #cbd5e1;border-radius:16px;padding:24px;color:#172033;background:#fff;box-shadow:0 12px 50px #0004';
+            const heading=document.createElement('h2');heading.textContent='Welcome to LiveChat Browser';const text=document.createElement('p');text.textContent='Create a LiveChat account, or log in to your existing account. You will automatically return to LiveChat Browser after setup is complete.';
+            const create=document.createElement('button');create.type='button';create.textContent='Create account';create.style.cssText='padding:10px 14px;border:0;background:#2563eb;color:white;border-radius:8px;margin-right:8px;cursor:pointer';create.onclick=()=>{dialog.close();lcAuthMode('signup');};
+            const login=document.createElement('button');login.type='button';login.textContent='Log in';login.style.cssText='padding:10px 14px;border:1px solid #cbd5e1;background:#fff;color:#172033;border-radius:8px;cursor:pointer';login.onclick=()=>{dialog.close();lcAuthMode('login');};
+            dialog.append(heading,text,create,login);document.body.append(dialog);if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');
+        }
+
         let lcAuthCurrentMode = 'login', lcAuthSubmitting = false;
         function lcAuthMode(mode) {
             if (lcAuthSubmitting) return;
@@ -4319,6 +4329,10 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                         livechatShowBan(banCheck.banRecord, banCheck.bannedUsername ? 'account' : (banCheck.bannedDevice ? 'device' : 'network'));
                         return;
                     }
+                    if(new URLSearchParams(location.search).get('lcBrowserReturn')==='1'){
+                        try{localStorage.setItem('lc:welcome:done:'+user.uid,'1');await db.ref('users/'+user.uid+'/welcomeTutorialPending').set(false);}catch(e){}
+                        location.replace(new URL('GUSt.html',location.href).href);return;
+                    }
                     // A listener handles admins banning someone WHILE they are signed in.
                     if (typeof livechatWatchOwnBan === 'function') livechatWatchOwnBan(user.uid);
                     if(typeof livechatClearBanBanner==='function')livechatClearBanBanner();
@@ -4393,6 +4407,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 hideIncomingCall();
                 document.getElementById('auth-screen').classList.remove('hidden');
                 document.getElementById('app-screen').classList.add('hidden');
+                lcBrowserSignupNotice();
             }
         });
         if (!firebaseReady) {
@@ -5082,6 +5097,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
             }).catch(unavailable);
         }
         // Should a notification of this kind ('dm' | 'group') be shown, per prefs?
+        function shouldPlayChatSound(){return !!appPrefs.sound && !impersonating;}
         function shouldNotify(kind) {
             if (!appPrefs.notifEnabled || appPrefs.notifScope === 'none') return false;
             if (appPrefs.notifScope === 'dm' && kind === 'group') return false;
@@ -6127,7 +6143,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                         const showNotice = (resolvedName) => {
                             const who = resolvedName || inv.fromName || 'Someone';
                             showToast(who + ' invited you to ' + (inv.name || 'a server'));
-                            if(alertAllowed&&shouldNotify('group'))playBeepIn();
+                            if(alertAllowed&&shouldPlayChatSound())playBeepIn();
                             if (alertAllowed&&shouldNotify('group')) {
                                 notify(who, 'Invited you to ' + (inv.name || 'a server'), {
                                     id: 'invite_' + groupId,
@@ -6551,10 +6567,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     }
                     const isOpen = currentChatData && currentChatData.chatId === groupId;
                     if (isOpen) resetUnread(groupId);
-                    if(shouldNotify('group')){
-                        if (Array.isArray(m.mentions) && m.mentions.includes(currentUser.uid)) window.lcPlus?.playSelectedTone(false,true);
-                        else playBeepIn();
-                    }
+                    if(shouldPlayChatSound())playBeepIn();
                     const gName = (serverData[groupId] && serverData[groupId].name) || (myGroupsData[groupId] && myGroupsData[groupId].name) || 'Group';
                     // Server messages notify just like DMs unless the user disabled notifications/sound in Settings.
                     if (shouldNotify('group') || (Array.isArray(m.mentions) && m.mentions.includes(currentUser.uid) && appPrefs.notifEnabled)) {
@@ -9027,6 +9040,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     : (!canLoginAs ? 'Delegated admins cannot Login As the owner or another Admin Hub account.' : 'Temporarily view the app as ' + u.username);
                 if (canLoginAs) loginAs.addEventListener('click', () => loginAsUser(uid));
                 actions.appendChild(loginAs);
+                if(!isOwnerRow&&(isOwnerAccount()||!privilegedTarget)){const capBtn=document.createElement('button');capBtn.className='admin-imp';capBtn.textContent='🤖 AI limit';capBtn.onclick=()=>lcEditPersonalAiLimit(uid,u.username);actions.appendChild(capBtn);}
 
                 // Promote / demote admin — ONLY the owner can do this, and never on themselves/owner.
                 if (isOwnerAccount() && !isOwnerRow) {
@@ -10423,11 +10437,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     if (blockedData && blockedData[friendUid]) return; // ignore blocked users
                     const isOpen = currentChatData && currentChatData.uid === friendUid;
                     if (isOpen) resetUnread(chatId);
-                    if(shouldNotify('dm')){
-                        if (Array.isArray(m.mentions) && m.mentions.includes(currentUser.uid))
-                            window.lcPlus?.playSelectedTone(false,true);
-                        else playBeepIn();
-                    }
+                    if(shouldPlayChatSound())playBeepIn();
                     const name = displayNameFor(friendUid, myFriendsData[friendUid]);
                     if (shouldNotify('dm')) notify(name, msgPreview(m), { id: chatId,messageKey:snap.key, open: () => openChat(friendUid, myFriendsData[friendUid]) }, friendUid);
                 });
@@ -13544,7 +13554,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
         function stopRingtone() { window.lcPlus?.stopIncomingRingtone(); const r = document.getElementById('ringtone'); if (r) { r.pause(); try { r.currentTime = 0; } catch (e) {} } }
         function startRingback() { if (!soundEnabled) return; const r = document.getElementById('ringback'); if (r) { try { r.currentTime = 0; } catch (e) {} r.play().catch(() => {}); } }
         function stopRingback() { const r = document.getElementById('ringback'); if (r) { r.pause(); try { r.currentTime = 0; } catch (e) {} } }
-        function playBeepIn() { if (!soundEnabled) return; if(window.lcPlus?.playSelectedTone()) return; const a = document.getElementById('beep-in'); if (a) { try { a.currentTime = 0; } catch (e) {} a.play().catch(() => {}); } }
+        function playBeepIn() { if (!shouldPlayChatSound()) return; if(window.lcPlus?.playSelectedTone()) return; const a = document.getElementById('beep-in'); if (a) { try { a.currentTime = 0; } catch (e) {} a.play().catch(() => {}); } }
         function playBeepOut() { /* intentionally silent: we only beep on RECEIVED messages, not sent ones */ }
 
         // ==========================================
@@ -18234,7 +18244,7 @@ function lcCombinedCodeFiles(answer, maxFiles=12) {
     async function imageThumbnail(file){return new Promise(resolve=>{const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const max=420,scale=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*scale));c.height=Math.max(1,Math.round(im.height*scale));c.getContext('2d').drawImage(im,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.58));};im.onerror=()=>resolve('');im.src=String(r.result||'');};r.onerror=()=>resolve('');r.readAsDataURL(file);});}
 
     async function aiAuthHeaders(){if(!auth?.currentUser)throw new Error('Please log in again.');const token=await auth.currentUser.getIdToken(false);return {'Authorization':'Bearer '+token,'Content-Type':'application/json'};}
-    async function refreshAiUsage(){const left=document.getElementById('ai-requests-left'),sub=document.getElementById('ai-usage-sub');if(left)left.textContent='—';if(!aiWorkerConfigured()){if(sub)sub.textContent='Set your Cloudflare Worker URL first.';return;}try{const h=await aiAuthHeaders();delete h['Content-Type'];const r=await fetch(AI_WORKER_URL.replace(/\/$/,'')+'/usage',{headers:h,cache:'no-store'}),d=await r.json();if(!r.ok)throw new Error(d.error||'usage failed');if(left)left.textContent=d.remaining==null?'∞':String(d.remaining);if(sub)sub.textContent=(d.used||0)+' of '+(d.limit||'∞')+' used · resets '+new Date(d.resetsAt||Date.now()).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}catch(e){if(sub)sub.textContent='Could not read request usage.';}}
+    async function refreshAiUsage(){const left=document.getElementById('ai-requests-left'),sub=document.getElementById('ai-usage-sub');if(left)left.textContent='—';if(!aiWorkerConfigured()){if(sub)sub.textContent='Set your Cloudflare Worker URL first.';return;}try{const h=await aiAuthHeaders();delete h['Content-Type'];const r=await fetch(AI_WORKER_URL.replace(/\/$/,'')+'/usage',{headers:h,cache:'no-store'}),d=await r.json();if(!r.ok)throw new Error(d.error||'usage failed');if(left)left.textContent=d.remaining==null?'∞':String(d.remaining);if(sub)sub.textContent=(d.used||0)+' of '+(d.limit??'∞')+' used · resets '+new Date(d.resetsAt||Date.now()).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}catch(e){if(sub)sub.textContent='Could not read request usage.';}}
     async function askAiAssistant(){
         if(aiVisibleJob()||aiNavTarget!==aiCurrentChatId)return;if(impersonating||!aiCanUse())return showToast('AI Assistant is not enabled for this account.');if(!aiWorkerConfigured())return showToast('Cloudflare Worker URL is not configured yet.');
         const input=document.getElementById('ai-input'),text=String(input?.value||'').trim();if(text.length>600000)return showToast('This prompt exceeds the 600,000-character safety limit.');if(!text&&!aiAttachments.length)return;
@@ -18299,6 +18309,12 @@ function lcCombinedCodeFiles(answer, maxFiles=12) {
         const data=await r.json().catch(()=>({}));
         if(!r.ok)throw new Error(data.error||'Could not update AI settings.');
         return data;
+    }
+    async function lcEditPersonalAiLimit(uid,name){
+      if(!isAdminAccount()||impersonating)return;
+      const actor=currentUser.uid;
+      async function req(body){const response=await fetch(AI_WORKER_URL.replace(/\/$/,'')+'/admin/ai-personal-limit',{method:'POST',headers:await aiAuthHeaders(),body:JSON.stringify({uid,...body})});const d=await response.json().catch(()=>({}));if(!response.ok)throw Error(d.error||'Could not change AI limit');return d;}
+      try{const d=await req({});if(currentUser?.uid!==actor||impersonating)return;const value=prompt('Daily AI request cap for '+name+' (0–'+d.base+'). Blank = normal limit; 0 = no requests. Current effective limit: '+d.limit,d.cap==null?'':String(d.cap));if(value===null)return;const text=value.trim();if(text&&!/^\d+$/.test(text))return showToast('Enter a whole number or leave blank.');const limit=text===''?null:Number(text);if(limit!==null&&(limit<0||limit>d.base))return showToast('Enter 0–'+d.base+'.');if(currentUser?.uid!==actor||impersonating)return;const saved=await req({limit});showToast(name+' now has '+saved.limit+' AI requests per day.');}catch(e){showToast(e.message);}
     }
     async function loadAdminAiControls(){
         const endpoint=document.getElementById('homework-ai-endpoint-status');
@@ -18419,10 +18435,13 @@ function lcCombinedCodeFiles(answer, maxFiles=12) {
 <script id="livechat-2026-tools-patch">
 // 2026 Tools + UX patch. Must be included after the original application scripts.
 const LC_TOOLS = [
-  ['browser','Remote Chromium browser'], ['htmlRunner','HTML file runner'],
+  ['browser','Remote Chromium browser'], ['livechatBrowser','LiveChat Browser'], ['htmlRunner','HTML file runner'],
   ['email','Gmail-style Mail'], ['watchHistory','Watch / visited history'], ['youtube','YouTube inside Classic Settings']
 ];
 let lcToolGrants = {}, lcToolRef = null, lcToolUid = null;
+let lcBrowserEveryone=false,lcBrowserGrant=null,lcBrowserRefs=[];
+function lcBrowserGrantActive(g){return !!g&&(g.permanent===true || (typeof g.expiresAt==='number'&&g.expiresAt>Date.now()));}
+function lcBrowserWatch(u){for(const [r,cb] of lcBrowserRefs)r.off('value',cb);lcBrowserRefs=[];lcBrowserEveryone=false;lcBrowserGrant=null;if(!u||!db)return;for(const [path,assign] of [['livechatBrowser/everyone',v=>lcBrowserEveryone=v===true],['livechatBrowser/grants/'+u.uid,v=>lcBrowserGrant=v]]){const r=db.ref(path);const cb=x=>{if(currentUser?.uid!==u.uid)return;assign(x.val());lcRenderToolsInSettings();window.dispatchEvent(new Event('lc-youtube-access-changed'));};lcBrowserRefs.push([r,cb]);r.on('value',cb,()=>{assign(null);lcRenderToolsInSettings();});}}
 let lcMailToken = '', lcMailExpires = 0, lcMailClient = null;
 let lcOpenToolName = null;
 let lcHistoryReadBusy = false;
@@ -18482,6 +18501,7 @@ async function loadOlderHistoryPage(pageSize=20) {
 }
 function lcToolEnabled(key) {
   if (!currentUser) return false;
+  if(key==='livechatBrowser')return !impersonating && (isAdminAccount() || lcBrowserEveryone || lcBrowserGrantActive(lcBrowserGrant));
   // Gmail, browser sessions and other linked accounts must not be reachable through Login As.
   if (impersonating && (key==='email' || key==='browser' || key==='watchHistory' || key==='youtube' || key==='htmlRunner')) return false;
   return key==='youtube' ? true : (isAdminAccount() || lcToolGrants[key] === true);
@@ -18520,6 +18540,7 @@ function lcRenderToolsInSettings() {
 function lcAttachToolGrants(u) {
   if(lcToolRef){try{lcToolRef.off();}catch(e){} lcToolRef=null;}
   lcToolGrants={}; lcToolUid=u?.uid||null;
+  lcBrowserWatch(u);
   lcMailToken='';lcMailExpires=0;lcMailClient=null;
   if(lcOpenToolName)closeLivechatTool();
   lcRenderToolsInSettings();lcUpdateYoutubeToolVisibility();
@@ -18531,6 +18552,41 @@ function lcAttachToolGrants(u) {
     if(lcOpenToolName&&!lcToolEnabled(lcOpenToolName))closeLivechatTool();
   },e=>console.warn('Tool grants unavailable',e));
 }
+
+async function lcBrowserAdminPanel(host,names){
+ if(!isAdminAccount())return;
+ const panel=lcEl('section');panel.style.cssText='padding:16px;border:2px solid var(--border,#94a3b8);border-radius:12px;margin:12px 0;';
+ panel.append(lcEl('h3',null,'LiveChat Browser · Access control'),lcEl('p',null,'Browser-only permissions and bans. No IP bans. Installation bans apply to the saved browser ID, not all users on a network. Clearing site data can change that ID.'));
+ host.prepend(panel);
+ const content=lcEl('div');panel.append(content);
+ const base=db.ref('livechatBrowser');
+ const reload=async()=>{
+  if(!isAdminAccount())return;content.replaceChildren(lcEl('p',null,'Loading browser access…'));
+  try{
+   const [config,devices]=await Promise.all([base.once('value'),db.ref('livechatBrowserDevices').once('value')]);
+   if(!isAdminAccount())return;
+   const d=config.val()||{}, allDevices=devices.val()||{};content.replaceChildren();
+   const makeBtn=(label,fn)=>{const b=lcEl('button',null,label);b.type='button';b.style.cssText='padding:7px 10px;margin:3px;border-radius:7px;';b.onclick=async()=>{b.disabled=true;try{await fn();await reload();}catch(e){showToast(e.message||'Browser setting failed');b.disabled=false;}};return b;};
+   const mode=lcEl('label');const cb=lcEl('input');cb.type='checkbox';cb.checked=d.everyone===true;cb.onchange=async()=>{cb.disabled=true;try{await base.child('everyone').set(cb.checked);await reload();}catch(e){showToast(e.message);cb.checked=!cb.checked;cb.disabled=false;}};mode.append(cb,document.createTextNode(' Allow everyone, including new registered accounts'));content.append(mode);
+   const search=lcEl('input');search.type='search';search.placeholder='Search username';search.style.cssText='display:block;width:100%;margin:12px 0;padding:8px;';content.append(search);
+   const list=lcEl('div');content.append(list);
+   const active=x=>!!x&&(x.permanent===true||Number(x.expiresAt)>Date.now());
+   const describe=x=>!active(x)?'Not active':x.permanent?'Permanent':new Date(x.expiresAt).toLocaleString();
+   const duration=()=>{const raw=prompt('Duration in minutes (0 = permanent). Example: 60 for 1 hour, 1440 for 1 day.','0');if(raw===null)return null;if(!/^\d+$/.test(raw.trim())||Number(raw)>525600)throw Error('Enter 0 to 525600 minutes.');const n=Number(raw);return {permanent:n===0,expiresAt:n?Date.now()+n*60000:0,by:auth.currentUser.uid,at:Date.now()};};
+   for(const {name,uid} of names){
+    const row=lcEl('div');row.dataset.name=name;row.style.cssText='padding:10px 0;border-top:1px solid var(--border,#94a3b8)';
+    row.append(lcEl('strong',null,name),lcEl('p',null,'Approval: '+describe(d.grants?.[uid])+' · Account ban: '+describe(d.accountBans?.[uid])));
+    row.append(makeBtn('Approve / renew',async()=>{const v=duration();if(v)await base.child('grants/'+uid).set(v);}),makeBtn('Remove approval',()=>base.child('grants/'+uid).remove()),makeBtn('Ban account',async()=>{if(!confirm('Ban '+name+' from LiveChat Browser only?'))return;const v=duration();if(v)await base.child('accountBans/'+uid).set(v);}),makeBtn('Unban account',()=>base.child('accountBans/'+uid).remove()));
+    const devs=Object.entries(allDevices[uid]||{}).sort((a,b)=>(b[1]?.lastSeen||0)-(a[1]?.lastSeen||0));
+    if(!devs.length)row.append(lcEl('p',null,'No browser installation recorded yet.'));
+    for(const [id,info] of devs){const line=lcEl('div');line.style.cssText='margin:7px 0 7px 12px;font-size:12px;';line.append(lcEl('span',null,'Installation '+id.slice(0,12)+'… · '+(info.lastSeen?new Date(info.lastSeen).toLocaleString():'Unknown')+' · '+describe(d.deviceBans?.[id])),makeBtn('Ban installation',async()=>{if(!confirm('Ban this saved installation only? Other installations are not affected.'))return;const v=duration();if(v)await base.child('deviceBans/'+id).set(v);}),makeBtn('Unban installation',()=>base.child('deviceBans/'+id).remove()));row.append(line);}
+    list.append(row);
+   }
+   search.oninput=()=>{for(const row of list.children)row.hidden=!row.dataset.name.toLowerCase().includes(search.value.toLowerCase());};
+  }catch(e){content.textContent='Browser controls unavailable: '+(e.message||e);}
+ };await reload();
+}
+
 async function loadExtraToolGrants(){
   if(!currentUser || !isAdminAccount())return;
   const host=document.getElementById('admin-extra-grants');if(!host)return;
@@ -18546,7 +18602,7 @@ async function loadExtraToolGrants(){
       const label=document.createElement('div');label.style.cssText='font-weight:750;font-size:12px;padding-bottom:6px;';
       label.textContent=name+(isAdmin?' · Admin (all tools enabled)':''); row.appendChild(label);
       const opts=document.createElement('div');opts.style.cssText='display:flex;gap:10px;flex-wrap:wrap;';
-      LC_TOOLS.forEach(([key,title])=>{
+      LC_TOOLS.filter(([key])=>key!=='livechatBrowser').forEach(([key,title])=>{
         const wrap=document.createElement('label');wrap.style.cssText='display:flex;align-items:center;gap:4px;font-size:11px;';
         const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=isAdmin||grants[uid]?.[key]===true;
         checkbox.disabled=isAdmin; checkbox.onchange=async()=>{
@@ -18564,6 +18620,7 @@ async function loadExtraToolGrants(){
       });
       row.appendChild(opts);host.appendChild(row);
     }
+    await lcBrowserAdminPanel(host,names);
     if(currentUser.uid===AI_OWNER_UID){
       const secure=lcEl('div');secure.style.cssText='padding:12px;border-top:2px solid #e2e8f0;margin-top:10px;';
       const tip=lcEl('p',null,'Security: old LiveChat versions saved users’ passwords as plain text in Firebase. Remove these old password copies before connecting Gmail accounts. This does not change anyone’s Firebase login password.');
@@ -18609,6 +18666,7 @@ function lcToolScaffold(key,title) {
 function openLivechatTool(key) {
   if(key==='legacySettings'){ if(window.livechatOpenLegacySettings)return window.livechatOpenLegacySettings();return; }
   if(impersonating && (key==='email'||key==='browser'||key==='watchHistory')){showToast('Linked or protected apps cannot be opened in Login As.');return;}
+  if(key==='livechatBrowser'){if(!lcToolEnabled(key))return showToast('LiveChat Browser is not available for this account.');window.open(new URL('GUSt.html',location.href).href,'_blank','noopener');return;}
   if(key==='browser')return lcOpenBrowser();
   if(key==='htmlRunner')return lcOpenRunner();
   if(key==='watchHistory')return lcShowWatchHistory();
@@ -19952,7 +20010,7 @@ function apps(parent){
   ? 'Apps and tools for this LiveChat account. External sign-ins and private sessions stay with the account owner.'
   : 'Explore apps and connections available on your account. Your connected accounts stay private.'));
  const card=box(parent);
- const options=[['email','Gmail Mail'],['browser','Chromium Browser'],['htmlRunner','HTML Runner'],['watchHistory','Visited History']];
+ const options=[['email','Gmail Mail'],['browser','Chromium Browser'],['livechatBrowser','LiveChat Browser'],['htmlRunner','HTML Runner'],['watchHistory','Visited History']];
  // Match the account owner's normal Apps & Connections layout in Login As.
  // The admin is still authenticated as themselves: never make signed requests
  // or open external-account sessions on behalf of the selected user.
@@ -20860,7 +20918,7 @@ function augmentProfile(target,data,uid,label){
 }
 let atSuggestions=[],atIndex=0;
 function showAtSuggestions(){
- const input=$('message-input'),box=$('lc-at-suggest');if(!input||!box||!currentChatData||!ready()){if(box)box.hidden=true;return}
+ const input=$('message-input'),box=$('lc-at-suggest');if(input&&/^\/(ship|marry)\b/i.test(input.value)){if(box)box.hidden=true;return;}if(!input||!box||!currentChatData||!ready()){if(box)box.hidden=true;return}
  const prefix=input.value.slice(0,input.selectionStart);const m=prefix.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);if(!m){box.hidden=true;return}
  const query=m[1].toLowerCase();let opts=[];
  if(currentChatData.isGroup){
@@ -22899,6 +22957,7 @@ const opts=[['grades','📊 Grades','Live StudentVUE grades, history and GradeWa
  ['gmail','✉ Gmail','Mail inbox',()=>typeof lcToolEnabled==='function'&&lcToolEnabled('email'),()=>window.openLivechatTool?.('email')],
  ['ai','🤖 AI Assistant','Full-screen AI',()=>typeof aiCanUse==='function'&&aiCanUse(),()=>window.openHomeworkAi?.()],
  ['youtube','▶ YouTube','Open YouTube',()=>typeof lcToolEnabled==='function'&&lcToolEnabled('youtube'),()=>window.livechatOpenYouTube?.()],
+ ['livechatBrowser','🌐 LiveChat Browser','Browser',()=>typeof lcToolEnabled==='function'&&lcToolEnabled('livechatBrowser'),()=>window.openLivechatTool?.('livechatBrowser')],
  ['browser','🌐 Browser','Cloud browser',()=>typeof lcToolEnabled==='function'&&lcToolEnabled('browser'),()=>window.openLivechatTool?.('browser')],
  ['htmlRunner','⌨ HTML Runner','Run local HTML',()=>typeof lcToolEnabled==='function'&&lcToolEnabled('htmlRunner'),()=>window.openLivechatTool?.('htmlRunner')],
  ['schedule','🗓 Calendar & Tasks','Admin-only calendar, events, tasks and timed reminders',()=>typeof isAdminAccount==='function'&&isAdminAccount(),()=>window.lcAdminScheduleOpen?.()],
@@ -24403,7 +24462,7 @@ try{auth.onAuthStateChanged(()=>setTimeout(tick,1400))}catch(_){}
 #my-avatar{cursor:pointer}#my-avatar:focus-visible{outline:2px solid #a9a3ff;outline-offset:3px}
 @media(max-width:750px){#lc-sched-backdrop.lc-unified-planner .lc-sched-workspace{grid-template-columns:1fr}#lc-sched-backdrop.lc-unified-planner .lc-sched-calendar-panel{order:2;border:0}#lc-sched-backdrop.lc-unified-planner .lc-sched-right{overflow:visible}}
 </style>
-<script src="planner-hub.js?v=20261112-reliability" defer></script>
+<script src="planner-hub.js?v=20261117-all-tasks" defer></script>
 <style id="lc-local-games-focus-fixes">
 #game-stage{min-width:0;min-height:0;isolation:isolate}
 #game-stage:fullscreen,#game-stage:-webkit-full-screen{width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;background:#000;overflow:hidden!important;zoom:1!important}
@@ -24477,7 +24536,7 @@ async function lcCheckServerRules(gid,s){const uid=currentUser?.uid,r=s?.serverR
 async function lcServerEntry(gid,proceed){const seq=++lcRuleGateSeq,uid=currentUser?.uid;try{const s=(await db.ref('groups/'+gid).once('value')).val();if(!s||currentUser?.uid!==uid||seq!==lcRuleGateSeq)return;const yes=await lcCheckServerRules(gid,s);if(yes&&seq===lcRuleGateSeq&&currentUser?.uid===uid)await proceed(s);else if(!yes&&seq===lcRuleGateSeq){if(currentChatData?.groupId===gid){detachChatListeners();detachServerCallWatch();closeMobileChat();document.getElementById('messages').replaceChildren();document.getElementById('chat-area').classList.add('hidden');}showToast('Server rules not accepted. You can try again later.');}}catch(e){showToast('Could not open server: '+e.message);}}
 // Only the current role's usable commands, including installed apps. /help itself isn't counted.
 function lcAvailableCommands(gid){if(!gid)return [];const base=COMMANDS.filter(c=>{const cmd=c.s.split(/[\s<]/)[0];if(cmd==='/help')return false;if(['/me','/shrug','/roll'].includes(cmd))return lcCanBasicCommands(gid);if(cmd==='/role')return getMyRole(gid)==='owner';return canServerModerate(gid);});
- base.push({s:'/apps',d:lcCanManageApps(gid)?'Browse and install server apps.':'Browse server apps.'});for(const [,a] of lcInstalled(gid))for(const cmd of a.commands){const i=base.findIndex(x=>x.s.split(/[\s<]/)[0]==='/'+cmd);if(i>=0)base.splice(i,1);base.push({s:cmd==='ship'?'/ship <user1> <user2>':cmd==='marry'?'/marry <user>':'/'+cmd,d:cmd==='marry'?'Propose to a member, or use /marry accept <user>.':a.name+' — '+a.desc});}return base;}
+ base.push({s:'/apps',d:lcCanManageApps(gid)?'Browse and install server apps.':'Browse server apps.'});for(const [,a] of lcInstalled(gid))for(const cmd of a.commands){const i=base.findIndex(x=>x.s.split(/[\s<]/)[0]==='/'+cmd);if(i>=0)base.splice(i,1);base.push({s:cmd==='ship'?'/ship <user1> <user2>':cmd==='marry'?'/marry <user>':'/'+cmd,d:cmd==='marry'?'Propose to a member, or use /marry accept <user>.':a.name+' — '+a.desc});}if(lcInstalled(gid).some(([id])=>['riddle','trivia'].includes(id)))base.push({s:'/reveal [riddle|trivia]',d:'Reveal the latest unanswered question.'});return base;}
 
 const lcShipRenderCache=new Map();
 function lcShipFallbackLabel(name){const clean=String(name||'').trim();return (clean[0]||'?').toUpperCase();}
@@ -24510,7 +24569,7 @@ async function lcRenderShipImage(msg,imgEl){
  const data=canvas.toDataURL('image/png'); lcShipRenderCache.set(key,data);while(lcShipRenderCache.size>24)lcShipRenderCache.delete(lcShipRenderCache.keys().next().value); imgEl.src=data;
 }
 
-function lcRunAppCommand(text,gid){const m=text.match(/^\/([a-z-]+)(?:\s+([\s\S]*))?$/i);if(!m)return false;const cmd=m[1].toLowerCase(),args=m[2]||'';if(cmd==='apps'){lcOpenApps(gid);return true;}const installed=lcInstalled(gid).find(([,a])=>a.commands.includes(cmd));const app=installed?.[0]||(['ship','marry'].includes(cmd)?'matchmaker':null);if(!app)return false; // Worker checks current installation, even if local server data is still syncing.
+function lcRunAppCommand(text,gid){const m=text.match(/^\/([a-z-]+)(?:\s+([\s\S]*))?$/i);if(!m)return false;const cmd=m[1].toLowerCase(),args=m[2]||'';if(cmd==='apps'){lcOpenApps(gid);return true;}if(cmd==='reveal'){const target=args.trim().toLowerCase();if(target&&!['riddle','trivia'].includes(target)){showToast('Usage: /reveal [riddle|trivia]');return true;}const latest=Object.entries(currentMessages||{}).filter(([,m])=>m?.hasAnswer&&!m.answerRevealed&&!m.unsent&&['riddle','trivia'].includes(m.botApp)&&(!target||m.botApp===target)&&serverData[gid]?.installedApps?.[m.botApp]).sort((x,y)=>(Number(y[1].timestamp)||0)-(Number(x[1].timestamp)||0)||y[0].localeCompare(x[0]))[0];lcAppRequest(gid,'reveal',args,latest?.[1]?.botApp||'',latest?.[0]||'').catch(e=>showToast(e.message));return true;}const installed=lcInstalled(gid).find(([,a])=>a.commands.includes(cmd));const app=installed?.[0]||(['ship','marry'].includes(cmd)?'matchmaker':null);if(!app)return false; // Worker checks current installation, even if local server data is still syncing.
  if(amIMuted(gid)){showToast('You are muted in this server.');return true;}if(!amIMemberOf(gid)){showToast('You are no longer a member.');return true;}
  lcAppRequest(gid,cmd,args,app).catch(e=>showToast(e.message));return true;}
 function lcAppInvocationLine(msg){
@@ -24527,32 +24586,33 @@ function lcAppInvocationLine(msg){
 function lcRenderAppMessage(key,msg){const app=LC_SERVER_APPS[msg.botApp];if(!app||msg.sender!=='lc-app-'+msg.botApp)return false;currentMessages[key]=msg;maybeInsertDateDivider(msg.timestamp);const wrap=lcAppNode('div',undefined,'msg-container received lc-app-message');wrap.id='msg-wrapper-'+key;const av=lcAppNode('div',app.icon,'msg-avatar lc-app-avatar');const content=lcAppNode('div',undefined,'lc-app-message-content');const header=lcAppNode('div',undefined,'lc-app-message-header');header.append(lcAppNode('strong',app.name),lcAppNode('span','APP','lc-app-tag'),lcAppNode('small',new Date(msg.timestamp||Date.now()).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})));const invocation=lcAppInvocationLine(msg);if(invocation)content.append(invocation);content.append(header);
  if(msg.type==='poll'){const holder=lcAppNode('div',undefined,'interactive-holder');holder.append(buildInteractiveCard(msg,key,true));content.append(holder);}else if(msg.type==='ship'){const holder=lcAppNode('div',undefined,'lc-app-message-text');if(msg.text)holder.append(lcAppNode('div',msg.text,'lc-app-message-text'));const img=document.createElement('img');img.className='lc-ship-image';img.alt='Ship result';img.decoding='async';img.loading='lazy';holder.append(img);content.append(holder);lcRenderShipImage(msg,img).catch(()=>{img.replaceWith(lcAppNode('div',(msg.ship?.n1||'Member')+' + '+(msg.ship?.n2||'Member')+' = '+(msg.ship?.score||0)+'%','lc-app-message-text'));});}else content.append(lcAppNode('div',msg.text||'','lc-app-message-text'));
  const gid=currentChatData?.groupId;
- if(msg.hasAnswer&&!msg.answerRevealed&&lcCanManageApps(gid)&&serverData[gid]?.installedApps?.[msg.botApp]){const button=lcAppBtn('View answer',async()=>{if(!lcCanManageApps(gid))return;button.disabled=true;try{await lcAppRequest(gid,'reveal','',msg.botApp,key);}catch(e){button.disabled=false;showToast(e.message);}});button.className='lc-reveal-answer';content.append(button);}
+ if(msg.hasAnswer&&!msg.answerRevealed&&amIMemberOf(gid)&&!amIMuted(gid)&&serverData[gid]?.installedApps?.[msg.botApp]){const button=lcAppBtn('View answer',async()=>{if(!amIMemberOf(gid)||amIMuted(gid))return;button.disabled=true;try{await lcAppRequest(gid,'reveal','',msg.botApp,key);}catch(e){button.disabled=false;showToast(e.message);}});button.className='lc-reveal-answer';content.append(button);}
  if(msg.hasAnswer&&msg.answerRevealed)content.append(lcAppNode('small','Answer revealed to everyone.'));
  if(getMyRole(gid)==='owner'){content.addEventListener('contextmenu',e=>{e.preventDefault();ownerDeleteMessage(key);});}
  wrap.append(av,content);const box=document.getElementById('messages');box.append(wrap);box.scrollTop=box.scrollHeight;return true;}
-function lcRefreshBotButtons(gid){if(currentChatData?.groupId!==gid)return;for(const [key,m] of Object.entries(currentMessages||{})){if(!m?.botApp||!m.hasAnswer)continue;const w=document.getElementById('msg-wrapper-'+key);if(!w)continue;const should=!m.answerRevealed&&lcCanManageApps(gid)&&serverData[gid]?.installedApps?.[m.botApp];const old=w.querySelector('.lc-reveal-answer');if(!should&&old)old.remove();else if(should&&!old){const c=w.querySelector('.lc-app-message-content');if(c){const b=lcAppBtn('View answer',async()=>{b.disabled=true;try{await lcAppRequest(gid,'reveal','',m.botApp,key);}catch(e){b.disabled=false;showToast(e.message);}});b.className='lc-reveal-answer';c.append(b);}}}}
+function lcRefreshBotButtons(gid){if(currentChatData?.groupId!==gid)return;for(const [key,m] of Object.entries(currentMessages||{})){if(!m?.botApp||!m.hasAnswer)continue;const w=document.getElementById('msg-wrapper-'+key);if(!w)continue;const should=!m.answerRevealed&&amIMemberOf(gid)&&!amIMuted(gid)&&serverData[gid]?.installedApps?.[m.botApp];const old=w.querySelector('.lc-reveal-answer');if(!should&&old)old.remove();else if(should&&!old){const c=w.querySelector('.lc-app-message-content');if(c){const b=lcAppBtn('View answer',async()=>{b.disabled=true;try{await lcAppRequest(gid,'reveal','',m.botApp,key);}catch(e){b.disabled=false;showToast(e.message);}});b.className='lc-reveal-answer';c.append(b);}}}}
 function lcAddBotMembers(panel,gid){const entries=lcInstalled(gid);if(!entries.length)return;panel.append(lcAppNode('h3','Apps — '+entries.length));for(const [id,a] of entries){const row=lcAppNode('div',undefined,'lc-app-member');row.append(lcAppNode('span','🟢 '+a.icon),lcAppNode('strong',a.name),lcAppNode('span','APP','lc-app-tag'));panel.append(row);}}
 function lcMatchmakerSuggestions(gid,val){
  const [word,...args]=val.split(/\s+/),cmd=word.toLowerCase(),partial=args.pop()||'',prefix=args;
  if(cmd==='/ship'&&prefix.length>1||cmd==='/marry'&&(prefix.length>1||prefix.length===1&&prefix[0].toLowerCase()!=='accept'))return [];
  const norm=x=>String(x||'').replace(/^@/,'').toLowerCase();
- const members=Object.entries(serverData[gid]?.members||{}).filter(([id,m])=>m?.username&&!serverData[gid]?.banned?.[id]&&(cmd==='/ship'||id!==currentUser.uid));
+ const members=Object.entries(serverData[gid]?.members||{}).map(([id,m])=>[id,{...m,username:m?.username||userNameCache[id]||''}]).filter(([id,m])=>m.username&&!serverData[gid]?.banned?.[id]&&(cmd==='/ship'||id!==currentUser.uid));
  const exact=members.some(([,m])=>norm(m.username)===norm(partial));
  // Fully typed final arguments should be sent normally, not consumed by autocomplete.
- if(exact&&(cmd==='/marry'&&!(prefix.length===0&&partial.toLowerCase()==='accept')||cmd==='/ship'&&prefix.length===1))return [];
- const out=members.filter(([,m])=>norm(m.username).startsWith(norm(partial))&&!(cmd==='/ship'&&prefix.length&&norm(m.username)===norm(prefix[0]))).map(([,m])=>({value:[cmd,...prefix,m.username].join(' '),label:m.username+' · Member'}));
+ // Keep exact matches visible for click/Tab; Enter sends complete commands.
+ const complete=exact&&(cmd==='/marry'&&!(prefix.length===0&&partial.toLowerCase()==='accept')||cmd==='/ship'&&prefix.length===1);
+ const out=members.filter(([,m])=>norm(m.username).startsWith(norm(partial))&&!(cmd==='/ship'&&prefix.length&&norm(m.username)===norm(prefix[0]))).map(([,m])=>({value:[cmd,...prefix,m.username].join(' '),label:m.username+' · Member',complete:complete&&norm(m.username)===norm(partial)}));
  if(cmd==='/marry'&&!prefix.length&&'accept'.startsWith(partial.toLowerCase()))out.unshift({value:'/marry accept',label:'/marry accept · Accept a proposal'});
  return out.slice(0,12);
 }
 function lcWireSlashAutocomplete(){const input=document.getElementById('message-input');if(!input)return;const box=lcAppNode('div',undefined,'lc-at-suggest');box.id='lc-slash-suggest';box.hidden=true;input.parentElement.append(box);let choices=[],index=0;
  function pick(i){if(!choices[i])return;input.value=choices[i].value+' ';box.hidden=true;choices=[];input.focus();input.dispatchEvent(new Event('input',{bubbles:true}));}
  function draw(){box.replaceChildren();choices.forEach((c,i)=>{const b=lcAppBtn(c.label,()=>pick(i));b.className='lc-at-choice'+(i===index?' active':'');b.onmousedown=e=>e.preventDefault();box.append(b);});box.hidden=!choices.length;}
- input.addEventListener('input',()=>{const gid=currentChatData?.groupId,val=input.value;choices=[];index=0;if(gid&&/^\/[a-z-]*$/i.test(val)){choices=[{s:'/help',d:'Show your available commands'},...lcAvailableCommands(gid)].filter(c=>c.s.toLowerCase().startsWith(val.toLowerCase())).map(c=>({value:c.s.split(/[\s<]/)[0],label:c.s+' · '+c.d})).slice(0,15);}
- else if(gid&&/^\/(ship|marry)\s/i.test(val)&&serverData[gid]?.installedApps?.matchmaker===true){choices=lcMatchmakerSuggestions(gid,val);}
+ input.addEventListener('input',()=>{const gid=currentChatData?.groupId,val=input.value;choices=[];index=0;if(gid&&/^\/[a-z-]*$/i.test(val)){choices=[{s:'/help',d:'Show your available commands'},...lcAvailableCommands(gid)].filter(c=>c.s.toLowerCase().startsWith(val.toLowerCase())).map(c=>({value:c.s.split(/[\s<]/)[0],label:c.s+' · '+c.d,complete:['/reveal','/help','/joke','/riddle','/trivia','/qotd','/coinflip','/apps'].includes(val.toLowerCase())&&c.s.split(/[\s<]/)[0]===val.toLowerCase()})).slice(0,15);}
+ else if(gid&&/^\/(ship|marry)\s/i.test(val)){choices=lcMatchmakerSuggestions(gid,val);}
  else if(gid&&/^\/(ban|kick|mute|unmute|role|duel)\s+@?[^\s]*$/i.test(val)){const [word,partial='']=val.split(/\s+/);const allowed=lcAvailableCommands(gid).some(c=>c.s.split(/[\s<]/)[0]===word);if(allowed){choices=Object.entries(serverData[gid]?.members||{}).filter(([id,m])=>id!==currentUser.uid&&(word==='/duel'||id!==serverData[gid].owner)&&String(m.username||'').toLowerCase().startsWith(partial.replace(/^@/,'').toLowerCase())).map(([,m])=>({value:word+' '+m.username,label:m.username+' · Member'})).slice(0,12);}}
  draw();if(!box.hidden){hideMention();const at=document.getElementById('lc-at-suggest');if(at)at.hidden=true;}});
- input.addEventListener('keydown',e=>{if(box.hidden||!choices.length)return;if(!currentChatData?.isGroup){box.hidden=true;return;}if(['Tab','Enter','ArrowDown','ArrowUp','Escape'].includes(e.key)){e.preventDefault();e.stopImmediatePropagation();if(e.key==='Escape'){box.hidden=true;return;}if(e.key==='Tab'||e.key==='Enter'){pick(index);return;}index=(index+(e.key==='ArrowDown'?1:-1)+choices.length)%choices.length;draw();}},true);
+ input.addEventListener('keydown',e=>{if(box.hidden||!choices.length)return;if(!currentChatData?.isGroup){box.hidden=true;return;}if(e.key==='Enter'&&choices.some(c=>c.complete)){box.hidden=true;return;}if(['Tab','Enter','ArrowDown','ArrowUp','Escape'].includes(e.key)){e.preventDefault();e.stopImmediatePropagation();if(e.key==='Escape'){box.hidden=true;return;}if(e.key==='Tab'||e.key==='Enter'){pick(index);return;}index=(index+(e.key==='ArrowDown'?1:-1)+choices.length)%choices.length;draw();}},true);
  input.addEventListener('blur',()=>setTimeout(()=>{box.hidden=true;},120));}
 
 lcWireSlashAutocomplete();
@@ -24853,20 +24913,20 @@ function msg(text){flash=String(text);const n=$('cd-message');if(n)n.textContent
 function cleanup(){session++;clearInterval(timer);timer=null;stage=null;selected=null;pending=0;queued=null;busy=false;renderedRound='';}
 function reset(){cleanup();if(inboxRef)inboxRef.off();if(clockRef)clockRef.off();if(disabledRef)disabledRef.off();for(const r of watchers.values())r.off();watchers.clear();matches.clear();notified.clear();dialog?.remove();dialog=null;inboxRef=clockRef=disabledRef=null;disabled=false;me=null;}
 function attach(){const id=uid();if(!id){if(me)reset();return;}if(me===id)return;reset();me=id;clockRef=db.ref('.info/serverTimeOffset');clockRef.on('value',s=>offset=Number(s.val())||0);disabledRef=db.ref('disabledBuiltinGames/cookie-clicker-2-player');disabledRef.on('value',s=>{disabled=s.val()===true;if(disabled){dialog?.remove();dialog=null;if(stage)window.closeGame(true);}else notify();});
- inboxRef=db.ref('cookieDuel/inbox/'+id).orderByChild('at').limitToLast(30);inboxRef.on('value',s=>{if(me!==id)return;const entries=s.val()||{};for(const [k,r] of watchers)if(!entries[k]&&k!==selected){r.off();watchers.delete(k);matches.delete(k);}for(const k of Object.keys(entries)){if(watchers.has(k))continue;const r=db.ref('cookieDuel/matches/'+k);watchers.set(k,r);r.on('value',snap=>{if(me!==id)return;const g=snap.val();if(!g){matches.delete(k);return;}const old=matches.get(k);matches.set(k,g);if(old&&old.round===g.round&&old.status==='pending'&&g.status==='active')showToast('🍪 Cookie duel started!');if(selected===k&&stage){if(old?.round!==g.round){pending=0;queued=null;}render();}else if(stage&&!selected)home();notify();},e=>console.warn('Cookie duel listener',e.message));}if(stage&&!selected)home();},e=>{if(stage)msg('Could not load invitations: '+e.message);});}
+ inboxRef=db.ref('cookieDuel/inbox/'+id).orderByChild('at').limitToLast(30);inboxRef.on('value',s=>{if(me!==id)return;const entries=s.val()||{};for(const [k,r] of watchers)if(!entries[k]&&k!==selected){r.off();watchers.delete(k);matches.delete(k);}for(const k of Object.keys(entries)){if(watchers.has(k))continue;const r=db.ref('cookieDuel/matches/'+k);watchers.set(k,r);r.on('value',snap=>{if(me!==id)return;const g=snap.val();if(!g){matches.delete(k);return;}const old=matches.get(k);if(old&&old.round===g.round&&Number(g.revision)<Number(old.revision))return;matches.set(k,g);if(old&&old.round===g.round&&old.status==='pending'&&g.status==='active')showToast('🍪 Cookie duel started!');if(selected===k&&stage){if(old?.round!==g.round){pending=0;queued=null;}render();}else if(stage&&!selected)home();notify();},e=>console.warn('Cookie duel listener',e.message));}if(stage&&!selected)home();},e=>{if(stage)msg('Could not load invitations: '+e.message);});}
 function notify(){if(dialog){const g=matches.get(dialog.dataset.match);if(g&&status(g)!=='pending'){dialog.remove();dialog=null;}}if(disabled||!uid()||dialog)return;const entry=Array.from(matches.entries()).find(([id,g])=>g.guest===uid()&&status(g)==='pending'&&!notified.has(g.round));if(!entry)return;const [id,g]=entry;notified.add(g.round);const d=el('dialog',null,'cd-invite');dialog=d;d.dataset.match=id;d.append(el('h2','🍪 Cookie duel challenge'),el('p',(g.names[g.owner]||'A friend')+' challenged you!'),el('p','Both players start at zero. Bake cookies, buy buildings and steal from each other.'));const row=el('div',null,'cd-actions');const close=()=>{d.remove();if(dialog===d)dialog=null;notify();};for(const op of ['accept','decline']){const b=button(op==='accept'?'Accept':'Decline',async()=>{for(const a of row.children)a.disabled=true;try{await api({op,id,round:g.round,actionId:crypto.randomUUID()});close();if(op==='accept')window.openCookieDuelGame(id);}catch(e){err.textContent=e.message;for(const a of row.children)a.disabled=false;}});row.append(b);}const err=el('p','','cd-error');d.append(row,err);d.addEventListener('cancel',e=>{e.preventDefault();close();});(document.fullscreenElement||document.body).append(d);try{d.showModal();}catch(e){d.setAttribute('open','');}}
 function home(){if(!stage||selected)return;const root=el('div',null,'cd-home');root.append(el('div','LIVECHAT • MULTIPLAYER','cd-kicker'),el('h1','🍪 Cookie Clicker 2 Player'),el('p','Challenge a friend to a shared baking duel. The host can end the match at any time.'));const list=el('div',null,'cd-lobby-list');for(const [id,g] of Array.from(matches.entries()).sort((a,b)=>b[1].createdAt-a[1].createdAt)){if(!['pending','active','ended'].includes(status(g)))continue;const other=g.owner===uid()?g.guest:g.owner;const row=el('div',null,'cd-lobby-row');row.append(el('span',(g.names[other]||'Friend')+' · '+status(g)),button(status(g)==='active'?'Resume':status(g)==='ended'?'Results':'View invite',()=>{selected=id;renderedRound='';render();}));list.append(row);}root.append(el('h3','Your matches'),list,el('h3','Challenge a friend'));const friends=Object.entries(myFriendsData||{}).filter(([id])=>id!==uid());const fbox=el('div',null,'cd-lobby-list');if(!friends.length)fbox.append(el('p','Add a friend in LiveChat first.'));for(const [id,name] of friends){const row=el('div',null,'cd-lobby-row');row.append(el('span',typeof publicUsernameFor==='function'?publicUsernameFor(id,null,String(name||'Friend')):String(name)));const b=button('Challenge',async()=>{b.disabled=true;try{const d=await api({op:'invite',friendUid:id});if(!stage)return;selected=d.id;renderedRound='';render();}catch(e){msg(e.message);}finally{b.disabled=false;}});row.append(b);fbox.append(row);}root.append(fbox,el('p',flash,'cd-error'));root.lastChild.id='cd-message';stage.replaceChildren(root);}
 function action(op,fields={}){if(!selected||!stage||busy||queued)return Promise.resolve(false);const g=matches.get(selected);if(!g)return Promise.resolve(false);return send({op,id:selected,round:g.round,actionId:crypto.randomUUID(),...fields});}
-async function send(body){const seq=session;if(busy)return false;busy=true;queued=body;try{const result=await api(body);if(seq!==session)return false;queued=null;if(body.op==='click'&&result.accepted<body.count)msg('Some very fast clicks were rate limited.');else if(body.op!=='click')msg(body.op==='steal'?`You stole ${fmt(result.amount)} cookies (${result.percent}% roll)!`:'');return true;}catch(e){if(seq!==session)return false;if(e.status&&e.status<500){queued=null;msg(e.message);}else msg('Connection interrupted. Retrying the same action…');return false;}finally{if(seq===session){busy=false;refresh();}}}
+async function send(body){const seq=session;if(busy)return false;busy=true;queued=body;try{const result=await api(body);if(seq!==session)return false;if(result.match){const prior=matches.get(body.id);if(!prior||prior.round===result.match.round&&Number(result.match.revision)>=Number(prior.revision))matches.set(body.id,result.match);}queued=null;if(body.op==='click'&&result.accepted<body.count)msg('Some very fast clicks were rate limited.');else if(body.op!=='click')msg(body.op==='steal'?`You stole ${fmt(result.amount)} cookies (${result.percent}% roll)!`:'');return true;}catch(e){if(seq!==session)return false;if(e.status&&e.status<500){queued=null;msg(e.message);}else msg('Connection interrupted. Retrying the same action…');return false;}finally{if(seq===session){busy=false;if(stage&&selected)render();}}}
 async function flush(){if(!stage||!selected||busy)return;if(queued){await send(queued);return;}if(pending>0&&matches.get(selected)?.status==='active'){const n=Math.min(pending,100);pending-=n;await action('click',{count:n});}}
-async function afterClicks(op,fields={}){if(busy||queued){msg('Syncing… please try again in a moment.');return;}if(pending){await flush();if(busy||queued)return;}await action(op,fields);}
+async function afterClicks(op,fields={}){if(busy||queued){msg('Syncing… please try again in a moment.');return;}while(pending){const before=pending;await flush();if(busy||queued||pending>=before||matches.get(selected)?.status!=='active')return;}await action(op,fields);}
 function leave(){if(pending||busy||queued){msg('Wait for pending clicks to sync first.');return;}selected=null;renderedRound='';home();}
 function render(){if(!stage||!selected)return;const g=matches.get(selected);if(!g){stage.replaceChildren(el('div','Loading match…','cd-home'));return;}const st=status(g),key=g.round+':'+st;if(renderedRound===key&&st==='active'){refresh();return;}renderedRound=key;
  if(st!=='active'){const root=el('div',null,'cd-home');root.append(button('← Matches',leave),el('h1','🍪 Cookie duel'));const other=g.owner===uid()?g.guest:g.owner;root.append(el('h2',g.names?.[other]||'Friend'));if(st==='pending'){root.append(el('p',g.owner===uid()?'Invitation sent. Waiting for your friend to accept.':'Your friend has challenged you.'));const row=el('div',null,'cd-actions');for(const op of g.owner===uid()?['cancel']:['accept','decline'])row.append(button(op[0].toUpperCase()+op.slice(1),()=>action(op)));root.append(row);}else if(st==='ended'){root.append(el('h2',g.winner==='tie'?'Tie!':(g.names[g.winner]||'Player')+' wins!'),el('p',`${g.names[g.owner]}: ${fmt(g.players[g.owner].cookies)} cookies · ${g.names[g.guest]}: ${fmt(g.players[g.guest].cookies)} cookies`));}else root.append(el('p','Invitation '+st+'.'));root.append(el('p',flash,'cd-error'));root.lastChild.id='cd-message';stage.replaceChildren(root);return;}
  const root=el('div',null,'cd-game');const head=el('header',null,'cd-head');head.append(button('← Matches',leave),el('strong','COOKIE DUEL'),el('span','Live multiplayer','cd-live'));if(g.owner===uid())head.append(button('End game',()=>{if(confirm('End the match for both players? The most banked cookies wins.'))afterClicks('end');},'cd-danger'));root.append(head);
  const main=el('div',null,'cd-columns'),left=el('section',null,'cd-bakery');left.append(el('div',g.names[uid()]+'’s bakery','cd-kicker'));const count=el('div','0 cookies','cd-count');count.id='cd-count';const cps=el('div','0 per second','cd-cps');cps.id='cd-cps';left.append(count,cps);const cookie=button('',()=>{if(!stage||matches.get(selected)?.status!=='active'||pending>=200)return;pending++;cookie.classList.remove('cd-pop');void cookie.offsetWidth;cookie.classList.add('cd-pop');refresh();},'cd-cookie');cookie.setAttribute('aria-label','Bake one cookie');const chips=[[24,29,7],[64,20,6],[43,44,8],[75,50,5],[25,68,6],[56,76,8],[82,76,4],[43,15,4],[12,46,4],[70,34,4],[41,91,4]];for(const [x,y,r] of chips){const chip=el('span',null,'cd-chip');chip.style.cssText=`left:${x}%;top:${y}%;width:${r*2}%;height:${r*2}%;`;cookie.append(chip);}left.append(cookie);const hint=el('small','Click or tap the cookie to bake.','cd-hint');hint.id='cd-click-hint';left.append(hint);const golden=button('✨ Golden cookie!',()=>afterClicks('golden'),'cd-golden');golden.id='cd-golden';left.append(golden);const center=el('section',null,'cd-arena');center.append(el('h2','Duel scoreboard'));const score=el('div','','cd-score');score.id='cd-score';center.append(score);const steal=button('Steal cookies',()=>afterClicks('steal'),'cd-steal');steal.id='cd-steal';center.append(steal,el('p','Steal 1–99% of your opponent’s bank. Odds: 80% for 1–10%, 15% for 11–25%, 4% for 26–75%, and 1% for 76–99%. Cost increases by 50% per successful steal.','cd-hint'));const achievements=el('div','','cd-achievements');achievements.id='cd-achievements';center.append(achievements,el('h3','Match activity'));const log=el('div','','cd-log');log.id='cd-log';center.append(log);const error=el('p',flash,'cd-error');error.id='cd-message';center.append(error);
  const shop=el('section',null,'cd-store');shop.append(el('h2','Store'));const ctrl=el('div',null,'cd-actions');for(const a of [1,10,100]){const b=button('×'+a,()=>{amount=a;refresh();});b.dataset.amount=a;ctrl.append(b);}const mode=button('Buy',()=>{sell=!sell;refresh();});mode.id='cd-mode';ctrl.append(mode);shop.append(ctrl);const builds=el('div',null,'cd-buildings');for(let i=0;i<CD_BUILDINGS.length;i++){const [name,,rate,icon]=CD_BUILDINGS[i],row=el('div',null,'cd-building');const buy=button('',()=>afterClicks(sell?'sell':'buy',{index:i,amount}),'cd-buy');buy.dataset.index=i;const title=el('strong',icon+' '+name),sub=el('small',''),qty=el('span','0','cd-qty');buy.append(title,sub,qty);const upgrade=button('⬆',()=>afterClicks('upgrade',{index:i}),'cd-upgrade');upgrade.dataset.upgrade=i;upgrade.title='Production upgrade';row.append(buy,upgrade);builds.append(row);}shop.append(builds);main.append(left,center,shop);root.append(main);stage.replaceChildren(root);refresh();}
-function refresh(){if(!stage||!selected)return;const g=matches.get(selected);if(!g||g.status!=='active'||!$('cd-count'))return;if(!g.players?.[uid()])return;const p=structuredClone(g.players[uid()]),other=g.owner===uid()?g.guest:g.owner,q=structuredClone(g.players[other]),t=Math.max(now(),p.updated,q.updated);cdAccrue(p,t);cdAccrue(q,t);const estimate=p.cookies+pending*cdClick(p);$('cd-count').textContent=fmt(estimate)+' cookies';$('cd-cps').textContent=rate(cdCps(p,t))+' per second';$('cd-click-hint').textContent=`+${fmt(cdClick(p))} per click${pending?' · '+pending+' syncing':''}`;$('cd-score').replaceChildren(...[[g.names[uid()],estimate,p],[g.names[other],q.cookies,q]].map(([name,bank,person])=>{const n=el('div',null,'cd-score-row');n.append(el('strong',name),el('span',fmt(bank)+' 🍪'),el('small',rate(cdCps(person,t))+' / sec'));return n;}));const s=$('cd-steal'),cost=cdStealCost(p);s.textContent=`Steal · ${fmt(cost)} 🍪${t<p.stealAt?' · '+Math.ceil((p.stealAt-t)/1000)+'s':''}`;s.disabled=busy||!!queued||p.cookies<cost||q.cookies<4||t<p.stealAt;const golden=$('cd-golden');golden.hidden=!(t>=g.goldenAt&&t<=g.goldenAt+20000);golden.disabled=busy||!!queued;const ach=$('cd-achievements');ach.textContent='Achievements: '+[p.baked>=1?'First cookie':'',p.baked>=1000?'1K baked':'',p.baked>=1e6?'Millionaire':'',p.steals?'Cookie bandit':'',p.buildings.reduce((a,b)=>a+b,0)>=50?'Baking empire':''].filter(Boolean).join(' · ');const log=$('cd-log');const stamp=g.eventSeq;if(log.dataset.seq!==String(stamp)){log.dataset.seq=String(stamp);log.replaceChildren(...Object.entries(g.events||{}).sort((a,b)=>Number(b[0])-Number(a[0])).map(([,e])=>el('p',e.text)));}for(const b of stage.querySelectorAll('[data-amount]'))b.classList.toggle('active',Number(b.dataset.amount)===amount);$('cd-mode').textContent=sell?'Sell':'Buy';for(const b of stage.querySelectorAll('[data-index]')){const i=Number(b.dataset.index),c=cdCost(p,i,amount);b.querySelector('small').textContent=sell?`${fmt(p.buildings[i])} available · sell at 25%`:`🍪 ${fmt(c)} · ${CD_BUILDINGS[i][2]*2**p.tiers[i]} / sec each`;b.querySelector('.cd-qty').textContent=p.buildings[i];b.disabled=busy||!!queued||(sell?!p.buildings[i]:p.cookies<c||p.buildings[i]+amount>1000);}for(const b of stage.querySelectorAll('[data-upgrade]')){const i=Number(b.dataset.upgrade),tier=p.tiers[i],cost=cdTierCost(p,i);b.textContent='⬆ '+fmt(cost);b.title='Double '+CD_BUILDINGS[i][0]+' production';b.disabled=busy||!!queued||tier>=CD_THRESH.length||p.buildings[i]<CD_THRESH[tier]||p.cookies<cost;} }
+function refresh(){if(!stage||!selected)return;const g=matches.get(selected);if(!g||g.status!=='active'||!$('cd-count'))return;if(!g.players?.[uid()])return;const p=structuredClone(g.players[uid()]),other=g.owner===uid()?g.guest:g.owner,q=structuredClone(g.players[other]),t=Math.max(now(),p.updated,q.updated);cdAccrue(p,t);cdAccrue(q,t);const inFlight=queued?.op==='click'&&queued.round===g.round&&!g.replays?.[uid()]?.[queued.actionId]?queued.count:0;const optimistic=pending+inFlight;const estimate=p.cookies+optimistic*cdClick(p);$('cd-count').textContent=fmt(estimate)+' cookies';$('cd-cps').textContent=rate(cdCps(p,t))+' per second';$('cd-click-hint').textContent=`+${fmt(cdClick(p))} per click${optimistic?' · '+optimistic+' syncing':''}`;$('cd-score').replaceChildren(...[[g.names[uid()],estimate,p],[g.names[other],q.cookies,q]].map(([name,bank,person])=>{const n=el('div',null,'cd-score-row');n.append(el('strong',name),el('span',fmt(bank)+' 🍪'),el('small',rate(cdCps(person,t))+' / sec'));return n;}));const s=$('cd-steal'),cost=cdStealCost(p);s.textContent=`Steal · ${fmt(cost)} 🍪${t<p.stealAt?' · '+Math.ceil((p.stealAt-t)/1000)+'s':''}`;s.disabled=busy||!!queued||p.cookies<cost||q.cookies<4||t<p.stealAt;const golden=$('cd-golden');golden.hidden=!(t>=g.goldenAt&&t<=g.goldenAt+20000);golden.disabled=busy||!!queued;const ach=$('cd-achievements');ach.textContent='Achievements: '+[p.baked>=1?'First cookie':'',p.baked>=1000?'1K baked':'',p.baked>=1e6?'Millionaire':'',p.steals?'Cookie bandit':'',p.buildings.reduce((a,b)=>a+b,0)>=50?'Baking empire':''].filter(Boolean).join(' · ');const log=$('cd-log');const stamp=g.eventSeq;if(log.dataset.seq!==String(stamp)){log.dataset.seq=String(stamp);log.replaceChildren(...Object.entries(g.events||{}).sort((a,b)=>Number(b[0])-Number(a[0])).map(([,e])=>el('p',e.text)));}for(const b of stage.querySelectorAll('[data-amount]'))b.classList.toggle('active',Number(b.dataset.amount)===amount);$('cd-mode').textContent=sell?'Sell':'Buy';for(const b of stage.querySelectorAll('[data-index]')){const i=Number(b.dataset.index),c=cdCost(p,i,amount);b.querySelector('small').textContent=sell?`${fmt(p.buildings[i])} available · sell at 25%`:`🍪 ${fmt(c)} · ${CD_BUILDINGS[i][2]*2**p.tiers[i]} / sec each`;b.querySelector('.cd-qty').textContent=p.buildings[i];b.disabled=busy||!!queued||(sell?!p.buildings[i]:p.cookies<c||p.buildings[i]+amount>1000);}for(const b of stage.querySelectorAll('[data-upgrade]')){const i=Number(b.dataset.upgrade),tier=p.tiers[i],cost=cdTierCost(p,i);b.textContent='⬆ '+fmt(cost);b.title='Double '+CD_BUILDINGS[i][0]+' production';b.disabled=busy||!!queued||tier>=CD_THRESH.length||p.buildings[i]<CD_THRESH[tier]||p.cookies<cost;} }
 function open(node,id){cleanup();attach();stage=node;selected=id||null;renderedRound='';flash='';if(selected)render();else home();let last=0;timer=setInterval(()=>{if(!uid()||uid()!==me||disabled){window.closeGame(true);return;}if(selected){const g=matches.get(selected);if(g&&status(g)!=='active'&&renderedRound!==g.round+':'+status(g))render();refresh();}if(Date.now()-last>=5000){last=Date.now();flush();}},500);return cleanup;}
 window.lcCookieDuel={open,hasPending:()=>!!(stage&&(pending||busy||queued)),isOpen:()=>!!stage,select:id=>{if(stage){if(pending||busy||queued){msg('Wait for pending actions to sync, then reopen the new match from Matches.');return;}selected=id;renderedRound='';render();}}};
 try{auth.onAuthStateChanged(()=>setTimeout(attach,100));}catch(e){}setInterval(()=>{attach();notify();},3000);
