@@ -2055,6 +2055,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
 #lc-sched-backdrop .lc-sched-item{display:flex;gap:12px;align-items:flex-start;padding:14px 13px;background:#1c2535;border:1px solid #343e53;border-radius:13px;border-left:3px solid var(--schedule-color,#988aff)}
 #lc-sched-backdrop .lc-sched-item.lc-sched-done{opacity:.61}
 #lc-sched-backdrop .lc-sched-check{width:21px;height:21px;accent-color:#8577f5;flex:none;margin:3px 0 0;cursor:pointer}
+#lc-sched-backdrop .lc-sched-tasktabs{display:flex;gap:6px;flex-wrap:wrap}#lc-sched-backdrop .lc-sched-tasktabs button{flex:1;min-width:105px}
 #lc-sched-backdrop .lc-sched-item-title{font-size:13px;color:#f1f4ff;font-weight:680;line-height:1.4;overflow-wrap:anywhere}
 #lc-sched-backdrop .lc-sched-done .lc-sched-item-title{text-decoration:line-through}
 #lc-sched-backdrop .lc-sched-item-note{font-size:11px;color:#b1bdd1;margin-top:5px;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -4331,7 +4332,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                     }
                     if(new URLSearchParams(location.search).get('lcBrowserReturn')==='1'){
                         try{localStorage.setItem('lc:welcome:done:'+user.uid,'1');await db.ref('users/'+user.uid+'/welcomeTutorialPending').set(false);}catch(e){}
-                        location.replace('https://grinchtaffy.github.io/proxy/');return;
+                        location.replace('https://grinchtaffy.github.io/proxy/?lcReturned=1');return;
                     }
                     // A listener handles admins banning someone WHILE they are signed in.
                     if (typeof livechatWatchOwnBan === 'function') livechatWatchOwnBan(user.uid);
@@ -24148,7 +24149,7 @@ const hourLabel=min=>min<0?'All day':new Date(2026,0,1,Math.floor(min/60),min%60
 const colors={work:'#8d83ff',school:'#35b9c5',personal:'#f3b76b',other:'#a5bb94'};
 let items={},selected=today(),shownMonth=new Date(),sub=null,subUid='',panel=null,editor=null,editing='',busy=false,noticeTimer=null;
 let historyItems={},historySub=null,prefsSub=null,itemsLoaded=false,reminderSound='soft',historyOpen=false,showingAlert=null,soundCtx=null;
-let previousFocus=null;
+let previousFocus=null,dayTaskFilter='unfinished';
 const $=s=>D.getElementById(s);
 function notifyText(msg){if(!owner())return;let el=$('lc-sched-toast');if(!el){el=D.createElement('div');el.id='lc-sched-toast';el.style.cssText='position:fixed;right:20px;bottom:25px;z-index:2147483102;max-width:min(365px,92vw);background:#242c48;border:1px solid #8179e8;color:white;border-radius:13px;padding:13px 16px;box-shadow:0 15px 45px #0008;font:13px system-ui;line-height:1.5';D.body.append(el);}el.textContent=msg;el.hidden=false;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>el.hidden=true,6500);}
 function el(tag,cls,text){const n=D.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=String(text);return n;}
@@ -24183,7 +24184,7 @@ function drawShell(){
  quick.append(quickHeader,quickControls,el('p','','Try “Study Friday at 3:30 PM” or “Pay bill Dec 15 at 9 AM”. Without a date, your selected day is used.'));right.append(quick);
  const dayHeader=el('div','lc-sched-dayheader');const caption=el('div');caption.append(el('span','','DAILY PLAN'));
  const dayTitle=el('h3');dayTitle.id='lc-sched-daytitle';caption.append(dayTitle);dayHeader.append(caption,button('+ New task',()=>openEditor(''),'lc-sched-btn lc-sched-btn-primary'));right.append(dayHeader);
- const tasks=el('div','lc-sched-list');tasks.id='lc-sched-tasks';right.append(tasks,el('div','lc-sched-soon-title','Coming up'));
+ const filters=el('div','lc-sched-tasktabs');filters.id='lc-sched-tasktabs';filters.setAttribute('role','group');filters.setAttribute('aria-label','Task status');right.append(filters);const tasks=el('div','lc-sched-list');tasks.id='lc-sched-tasks';right.append(tasks,el('div','lc-sched-soon-title','Coming up'));
  const upcoming=el('div','lc-sched-upcoming');upcoming.id='lc-sched-upcoming';right.append(upcoming);
  const historyBar=el('div','lc-sched-history-bar');const historyTitle=el('strong','', 'Reminder history');
  const historyToggle=button('Show history',()=>{historyOpen=!historyOpen;renderHistory()},'lc-sched-btn');historyToggle.id='lc-sched-history-toggle';historyBar.append(historyTitle,historyToggle);right.append(historyBar);
@@ -24223,11 +24224,11 @@ function render(){if(!panel||panel.hidden||!owner())return;
  const stats=$('lc-sched-stats');stats.replaceChildren();const todayList=Object.values(items).filter(x=>x.day===today());
  for(const [v,label] of [[todayList.length,'Today'],[todayList.filter(x=>x.done).length,'Finished'],[Object.values(items).filter(x=>!x.done&&x.day<today()).length,'Overdue']]){const c=el('div','lc-sched-stat');c.append(el('strong','',v),el('small','',label));stats.append(c)}
  $('lc-sched-daytitle').textContent=dateLabel(selected);$('lc-sched-jump').value=selected;renderSummary();renderHistory();const soundSelect=$('lc-sched-sound-choice');if(soundSelect)soundSelect.value=reminderSound;
- const list=$('lc-sched-tasks');list.replaceChildren();const onDay=Object.entries(items).filter(([,x])=>x.day===selected).sort((a,b)=>(a[1].done-b[1].done)||(a[1].minutes-b[1].minutes)||a[1].title.localeCompare(b[1].title));
- if(!onDay.length){const empty=el('div','lc-sched-blank');empty.append(el('div','','✦'),el('strong','','Room to breathe.'),el('p','','Nothing planned for this day. Add a task to get started.'));list.append(empty)}
+ const list=$('lc-sched-tasks');list.replaceChildren();const dayItems=Object.entries(items).filter(([,x])=>x.day===selected);const filterBar=$('lc-sched-tasktabs');filterBar.replaceChildren();for(const [key,label] of [['unfinished','Unfinished'],['completed','Completed']]){const count=dayItems.filter(([,x])=>key==='completed'?!!x.done:!x.done).length;const b=button(label+' ('+count+')',()=>{dayTaskFilter=key;render()},'lc-sched-btn'+(dayTaskFilter===key?' lc-sched-btn-primary':''));b.setAttribute('aria-pressed',String(dayTaskFilter===key));filterBar.append(b)}const onDay=dayItems.filter(([,x])=>dayTaskFilter==='completed'?!!x.done:!x.done).sort((a,b)=>(a[1].done-b[1].done)||(a[1].minutes-b[1].minutes)||a[1].title.localeCompare(b[1].title));
+ if(!onDay.length){const empty=el('div','lc-sched-blank');empty.append(el('div','','✦'),el('strong','',dayTaskFilter==='completed'?'No completed tasks':'All caught up!'),el('p','',dayTaskFilter==='completed'?'Finished tasks will appear here.':'No unfinished tasks on this date.'));list.append(empty)}
  for(const [id,task] of onDay){const card=el('article','lc-sched-item'+(task.done?' lc-sched-done':''));card.style.setProperty('--schedule-color',colors[task.category]||colors.other);
   const checkbox=el('input','lc-sched-check');checkbox.type='checkbox';checkbox.checked=!!task.done;checkbox.setAttribute('aria-label','Mark '+task.title+' '+(task.done?'incomplete':'done'));checkbox.onchange=()=>setDone(id,checkbox.checked);
-  const details=el('div','lc-sched-item-body');details.append(el('div','lc-sched-item-title',task.title));if(task.notes)details.append(el('div','lc-sched-item-note',task.notes));
+  const details=el('div','lc-sched-item-body'),title=el('div','lc-sched-item-title',task.title);details.append(title);if(window.lcPlannerRenderLinks&&!panel.classList.contains('lc-unified-planner'))window.lcPlannerRenderLinks(details,title,task.title,task.notes,'lc-sched-item-note');else if(task.notes)details.append(el('div','lc-sched-item-note',task.notes));
   const meta=el('div','lc-sched-item-meta');meta.append(el('span','',hourLabel(task.minutes)),el('span','',task.category[0].toUpperCase()+task.category.slice(1)));
   if(task.remind&&task.minutes>=0)meta.append(el('span','','🔔 Reminder on'));details.append(meta);
   const btns=el('div','lc-sched-item-actions');btns.append(button('Edit',()=>openEditor(id)),button('Delete',()=>deleteTask(id)));card.append(checkbox,details,btns);list.append(card)}
@@ -24236,7 +24237,7 @@ function render(){if(!panel||panel.hidden||!owner())return;
  for(const [id,task] of future){const b=button('',()=>selectDay(task.day),'lc-sched-upcoming-row');b.append(el('span','',task.title),el('small','',parseDay(task.day).toLocaleDateString(undefined,{month:'short',day:'numeric'})+' · '+hourLabel(task.minutes)));up.append(b)}
 }
 function navigate(n){shownMonth=new Date(shownMonth.getFullYear(),shownMonth.getMonth()+n,1);render()}
-function selectDay(d){selected=d;shownMonth=parseDay(d);render()}
+function selectDay(d){if(selected!==d)dayTaskFilter='unfinished';selected=d;shownMonth=parseDay(d);render()}
 function refreshPermission(){if(!panel)return;const b=$('lc-sched-permission');if(!b)return;
  const enabled=localStorage.getItem('lc-sched-enable-'+(auth?.currentUser?.uid||''))==='yes';
  if(!('Notification'in window)){b.textContent='Reminders in-app only';b.disabled=true;return}
@@ -24244,7 +24245,7 @@ function refreshPermission(){if(!panel)return;const b=$('lc-sched-permission');i
 }
 async function enableReminders(){if(!owner())return;if(!('Notification'in window)){notifyText('This browser does not support system notifications.');return}
  try{const p=await Notification.requestPermission();if(p==='granted'){localStorage.setItem('lc-sched-enable-'+currentUser.uid,'yes');notifyText('Reminders enabled while LiveChat is open.');checkReminders();}else notifyText('Notifications are blocked. Allow notifications for LiveChat in browser settings.');}catch(e){notifyText('Could not enable notifications: '+e.message)}refreshPermission();}
-function openPanel(fromPlanner=false){if(!owner()){if(panel)panel.hidden=true;return;}drawShell();previousFocus=D.activeElement;panel.hidden=false;selected=today();shownMonth=parseDay(selected);subscribe();render();if(!fromPlanner&&window.livechatPlannerOpen)window.livechatPlannerOpen('calendar',selected);else if(!fromPlanner)window.lcSchedulePlannerToggle?.(false);panel.querySelector('.lc-sched-topactions button:last-child')?.focus();}
+function openPanel(fromPlanner=false){if(!owner()){if(panel)panel.hidden=true;return;}drawShell();previousFocus=D.activeElement;panel.hidden=false;dayTaskFilter='unfinished';selected=today();shownMonth=parseDay(selected);subscribe();render();if(!fromPlanner&&window.livechatPlannerOpen)window.livechatPlannerOpen('calendar',selected);else if(!fromPlanner)window.lcSchedulePlannerToggle?.(false);panel.querySelector('.lc-sched-topactions button:last-child')?.focus();}
 function closePanel(){if(panel)panel.hidden=true;if(editor)editor.hidden=true;const hub=$('planner-hub');if(hub)hub.hidden=true;previousFocus?.focus?.();}
 function openEditor(id){if(!owner())return;drawShell();editing=id||'';const task=items[id]||{};editor.hidden=false;
  $('lc-sched-edit-heading').textContent=id?'Edit task':'New task';$('lc-sched-field-title').value=task.title||'';
@@ -24430,7 +24431,7 @@ window.lcSchedulePlannerToggle=function(show){
  }
  const hub=$('planner-hub');if(hub){if(hub.parentNode!==right)right.prepend(hub);else if(right.firstChild!==hub)right.prepend(hub);hub.hidden=!show;}
  panel.classList.toggle('lc-unified-planner',show);
- const sw=$('lc-sched-planner-switch');if(sw)sw.textContent=show?'📋 Daily Schedule':'📅 Planner & Dashboard';
+ if(!show)render();const sw=$('lc-sched-planner-switch');if(sw)sw.textContent=show?'📋 Daily Schedule':'📅 Planner & Dashboard';
 };
 window.lcAdminScheduleOpen=()=>openPanel();
 window.lcScheduleClose=closePanel;
@@ -24462,7 +24463,7 @@ try{auth.onAuthStateChanged(()=>setTimeout(tick,1400))}catch(_){}
 #my-avatar{cursor:pointer}#my-avatar:focus-visible{outline:2px solid #a9a3ff;outline-offset:3px}
 @media(max-width:750px){#lc-sched-backdrop.lc-unified-planner .lc-sched-workspace{grid-template-columns:1fr}#lc-sched-backdrop.lc-unified-planner .lc-sched-calendar-panel{order:2;border:0}#lc-sched-backdrop.lc-unified-planner .lc-sched-right{overflow:visible}}
 </style>
-<script src="planner-hub.js?v=20261117-all-tasks" defer></script>
+<script src="planner-hub.js?v=20261118-task-tabs-links" defer></script>
 <style id="lc-local-games-focus-fixes">
 #game-stage{min-width:0;min-height:0;isolation:isolate}
 #game-stage:fullscreen,#game-stage:-webkit-full-screen{width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;background:#000;overflow:hidden!important;zoom:1!important}
