@@ -8919,6 +8919,7 @@ body:has(#lc-livechat-legal-footer){height:calc(var(--app-height,100dvh) - 29px)
                 .catch(() => { if (btn) { btn.disabled = false; btn.innerText = many ? '🗑 Delete call' : '🗑 Delete'; } showToast('Delete failed.'); });
         }
         function closeAdminHub() {
+            if(typeof lcBrowserStopRequestQueue==='function')lcBrowserStopRequestQueue();
             document.getElementById('admin-modal').classList.add('hidden');
             // stop the live status listeners we attached for the users list
             for (const uid in adminStatusRefs) { try { adminStatusRefs[uid].ref.off('value', adminStatusRefs[uid].cb); } catch (e) {} }
@@ -18441,6 +18442,51 @@ const LC_TOOLS = [
 ];
 let lcToolGrants = {}, lcToolRef = null, lcToolUid = null;
 let lcBrowserEveryone=false,lcBrowserGrant=null,lcBrowserRefs=[];
+let lcBrowserRequestCleanup=null;
+function lcBrowserStopRequestQueue(){if(lcBrowserRequestCleanup){lcBrowserRequestCleanup();lcBrowserRequestCleanup=null;}}
+function lcBrowserAccessDuration(){const raw=prompt('Duration in minutes (0 = permanent). Example: 60 for 1 hour, 1440 for 1 day.','0');if(raw===null)return null;if(!/^\d+$/.test(raw.trim())||Number(raw)>525600)throw Error('Enter 0 to 525600 minutes.');const n=Number(raw);return {permanent:n===0,expiresAt:n?Date.now()+n*60000:0,by:auth.currentUser.uid,at:Date.now()};}
+function lcBrowserRequestQueue(host,names,onDecision){
+ lcBrowserStopRequestQueue();
+ const ref=db.ref('livechatBrowser/requests'), base=db.ref('livechatBrowser'), adminUid=auth.currentUser?.uid;
+ const queue=lcEl('section');queue.style.cssText='padding:12px;border:1px solid var(--border,#94a3b8);border-radius:10px;margin:12px 0;';
+ const heading=lcEl('h4',null,'Browser access requests');heading.style.margin='0 0 8px';
+ const list=lcEl('div',null,'Loading requests…');queue.append(heading,list);host.append(queue);
+ const valid=()=>queue.isConnected&&isAdminAccount()&&auth.currentUser?.uid===adminUid;
+ const labels={pending:'Awaiting review',read:'Read · awaiting decision',approved:'Approved',denied:'Denied'};
+ const namesByUid=Object.fromEntries(names.map(x=>[x.uid,x.name]));
+ const render=snap=>{
+  if(!valid())return;
+  const rows=Object.entries(snap.val()||{}).filter(([,r])=>r&&labels[r.status]);
+  const unresolved=rows.filter(([,r])=>r.status==='pending'||r.status==='read');
+  heading.textContent='Browser access requests · '+rows.filter(([,r])=>r.status==='pending').length+' new · '+unresolved.length+' awaiting decision';
+  list.replaceChildren();
+  if(!rows.length){list.append(lcEl('p',null,'No access requests yet.'));return;}
+  const priority={pending:0,read:1,approved:2,denied:2};
+  rows.sort((a,b)=>priority[a[1].status]-priority[b[1].status]||(b[1].createdAt||0)-(a[1].createdAt||0));
+  for(const [uid,r] of rows){
+   const row=lcEl('div');row.style.cssText='padding:9px 0;border-top:1px solid var(--border,#94a3b8);';
+   const nameLabel=lcEl('strong',null,namesByUid[uid]||uid);if(!namesByUid[uid])db.ref('users/'+uid+'/username').once('value').then(x=>{if(typeof x.val()==='string')nameLabel.textContent=x.val();}).catch(()=>{});
+   row.append(nameLabel,lcEl('p',null,labels[r.status]+' · Requested '+new Date(r.createdAt).toLocaleString()+(r.reviewedAt?' · Updated '+new Date(r.reviewedAt).toLocaleString():'')));
+   const btn=(title,action)=>{const b=lcEl('button',null,title);b.type='button';b.style.cssText='padding:7px 10px;margin:3px;border-radius:7px;';b.onclick=async()=>{if(!valid())return;const buttons=[...row.querySelectorAll('button')];buttons.forEach(x=>x.disabled=true);try{await action();}catch(e){showToast(e.message||'Could not update request.');}finally{buttons.forEach(x=>x.disabled=false);}};return b;};
+   const decide=async(status)=>{
+    if(!valid())return;
+    let grant=null;if(status==='approved'){grant=lcBrowserAccessDuration();if(!grant)return;}
+    if(status==='denied'&&!confirm('Deny this browser access request? This does not ban the account from LiveChat.'))return;
+    const changes={['requests/'+uid]:{createdAt:r.createdAt,status,reviewedAt:firebase.database.ServerValue.TIMESTAMP,by:adminUid}};
+    if(grant)changes['grants/'+uid]=grant;
+    await base.update(changes);if(grant&&valid())await onDecision();showToast(status==='read'?'Request marked as read.':status==='approved'?'Browser access approved.':'Browser access request denied.');
+   };
+   if(r.status==='pending'||r.status==='read'){
+    row.append(btn('Approve',()=>decide('approved')),btn('Deny',()=>decide('denied')));
+    if(r.status==='pending')row.append(btn('Mark as read',()=>decide('read')));
+   }else row.append(btn('Allow new request',async()=>{if(confirm('Clear this request history so the user can request access again if needed? Existing grants and bans are unchanged.'))await ref.child(uid).remove();}));
+   list.append(row);
+  }
+ };
+ const onError=e=>{if(valid())list.textContent='Could not load requests: '+(e.message||e);};
+ ref.on('value',render,onError);lcBrowserRequestCleanup=()=>ref.off('value',render);
+}
+
 function lcBrowserGrantActive(g){return !!g&&(g.permanent===true || (typeof g.expiresAt==='number'&&g.expiresAt>Date.now()));}
 function lcBrowserWatch(u){for(const [r,cb] of lcBrowserRefs)r.off('value',cb);lcBrowserRefs=[];lcBrowserEveryone=false;lcBrowserGrant=null;if(!u||!db)return;for(const [path,assign] of [['livechatBrowser/everyone',v=>lcBrowserEveryone=v===true],['livechatBrowser/grants/'+u.uid,v=>lcBrowserGrant=v]]){const r=db.ref(path);const cb=x=>{if(currentUser?.uid!==u.uid)return;assign(x.val());lcRenderToolsInSettings();window.dispatchEvent(new Event('lc-youtube-access-changed'));};lcBrowserRefs.push([r,cb]);r.on('value',cb,()=>{assign(null);lcRenderToolsInSettings();});}}
 let lcMailToken = '', lcMailExpires = 0, lcMailClient = null;
@@ -18528,17 +18574,18 @@ window.lcUpdateYoutubeToolVisibility=lcUpdateYoutubeToolVisibility;
 function lcRenderToolsInSettings() {
   const box = document.getElementById('lc-settings-tools'); if (!box) return;
   box.replaceChildren();
-  const enabled = LC_TOOLS.filter(([key]) => key!=='youtube' && lcToolEnabled(key));
+  const enabled = LC_TOOLS.filter(([key]) => key!=='youtube' && (key==='livechatBrowser'?!!currentUser&&!impersonating:lcToolEnabled(key)));
   const heading = document.getElementById('lc-tools-title');
   if(heading) heading.classList.toggle('hidden',!enabled.length);
   if(!enabled.length) {box.classList.add('hidden'); return;}
   box.classList.remove('hidden');
   for(const [key,title] of enabled) {
-    const b = document.createElement('button'); b.type='button'; b.textContent=title;
+    const b = document.createElement('button'); b.type='button'; b.textContent=key==='livechatBrowser'&&!lcToolEnabled(key)?title+' · Request access':title;
     b.onclick=()=>{closeAppSettings();openLivechatTool(key);}; box.appendChild(b);
   }
 }
 function lcAttachToolGrants(u) {
+  lcBrowserStopRequestQueue();
   if(lcToolRef){try{lcToolRef.off();}catch(e){} lcToolRef=null;}
   lcToolGrants={}; lcToolUid=u?.uid||null;
   lcBrowserWatch(u);
@@ -18557,10 +18604,12 @@ function lcAttachToolGrants(u) {
 async function lcBrowserAdminPanel(host,names){
  if(!isAdminAccount())return;
  const panel=lcEl('section');panel.style.cssText='padding:16px;border:2px solid var(--border,#94a3b8);border-radius:12px;margin:12px 0;';
- panel.append(lcEl('h3',null,'LiveChat Browser · Access control'),lcEl('p',null,'Browser-only permissions and bans. No IP bans. Installation bans apply to the saved browser ID, not all users on a network. Clearing site data can change that ID.'));
+ panel.append(lcEl('h3',null,'LiveChat Browser · Access control'),lcEl('p',null,'Admins and the owner are approved automatically. Regular accounts need approval unless Allow Everyone is enabled. Active account or installation bans override approval. These controls apply to LiveChat Browser only. Installation bans use a saved ID, not an IP address; clearing site data can change that ID.'));
  host.prepend(panel);
+ lcBrowserRequestQueue(panel,names,()=>reload());
  const content=lcEl('div');panel.append(content);
  const base=db.ref('livechatBrowser');
+ let searchText='';
  const reload=async()=>{
   if(!isAdminAccount())return;content.replaceChildren(lcEl('p',null,'Loading browser access…'));
   try{
@@ -18569,21 +18618,29 @@ async function lcBrowserAdminPanel(host,names){
    const d=config.val()||{}, allDevices=devices.val()||{};content.replaceChildren();
    const makeBtn=(label,fn)=>{const b=lcEl('button',null,label);b.type='button';b.style.cssText='padding:7px 10px;margin:3px;border-radius:7px;';b.onclick=async()=>{b.disabled=true;try{await fn();await reload();}catch(e){showToast(e.message||'Browser setting failed');b.disabled=false;}};return b;};
    const mode=lcEl('label');const cb=lcEl('input');cb.type='checkbox';cb.checked=d.everyone===true;cb.onchange=async()=>{cb.disabled=true;try{await base.child('everyone').set(cb.checked);await reload();}catch(e){showToast(e.message);cb.checked=!cb.checked;cb.disabled=false;}};mode.append(cb,document.createTextNode(' Allow everyone, including new registered accounts'));content.append(mode);
-   const search=lcEl('input');search.type='search';search.placeholder='Search username';search.style.cssText='display:block;width:100%;margin:12px 0;padding:8px;';content.append(search);
+   const search=lcEl('input');search.type='search';search.placeholder='Search username';search.value=searchText;search.style.cssText='display:block;width:100%;margin:12px 0;padding:8px;';content.append(search);
    const list=lcEl('div');content.append(list);
-   const active=x=>!!x&&(x.permanent===true||Number(x.expiresAt)>Date.now());
+   const active=x=>!!x&&(x.permanent===true||(typeof x.expiresAt==='number'&&x.expiresAt>Date.now()));
+   const banActive=x=>!!x&&(x.permanent===true||!Number.isFinite(Number(x.expiresAt))||Number(x.expiresAt)>Date.now());
    const describe=x=>!active(x)?'Not active':x.permanent?'Permanent':new Date(x.expiresAt).toLocaleString();
+   const describeBan=x=>!banActive(x)?'Not active':x.permanent?'Permanent':Number.isFinite(Number(x.expiresAt))?new Date(Number(x.expiresAt)).toLocaleString():'Active';
+   const modeInfo=lcEl('p',null,d.everyone===true?'Access mode: All registered accounts':'Access mode: Approved accounts and admins only');modeInfo.style.fontWeight='700';content.insertBefore(modeInfo,search);
    const duration=()=>{const raw=prompt('Duration in minutes (0 = permanent). Example: 60 for 1 hour, 1440 for 1 day.','0');if(raw===null)return null;if(!/^\d+$/.test(raw.trim())||Number(raw)>525600)throw Error('Enter 0 to 525600 minutes.');const n=Number(raw);return {permanent:n===0,expiresAt:n?Date.now()+n*60000:0,by:auth.currentUser.uid,at:Date.now()};};
    for(const {name,uid} of names){
     const row=lcEl('div');row.dataset.name=name;row.style.cssText='padding:10px 0;border-top:1px solid var(--border,#94a3b8)';
-    row.append(lcEl('strong',null,name),lcEl('p',null,'Approval: '+describe(d.grants?.[uid])+' · Account ban: '+describe(d.accountBans?.[uid])));
-    row.append(makeBtn('Approve / renew',async()=>{const v=duration();if(v)await base.child('grants/'+uid).set(v);}),makeBtn('Remove approval',()=>base.child('grants/'+uid).remove()),makeBtn('Ban account',async()=>{if(!confirm('Ban '+name+' from LiveChat Browser only?'))return;const v=duration();if(v)await base.child('accountBans/'+uid).set(v);}),makeBtn('Unban account',()=>base.child('accountBans/'+uid).remove()));
+    const admin=isUserAdmin(uid), grant=d.grants?.[uid], ban=d.accountBans?.[uid];
+    const approval=admin?'Automatic (admin)':d.everyone===true?'Automatic (everyone mode)':describe(grant);
+    const state=banActive(ban)?'Blocked by account ban':admin||d.everyone===true||active(grant)?'Account approved':'Approval required';
+    row.append(lcEl('strong',null,name+(admin?' · Admin':'')),lcEl('p',null,state+' · Approval: '+approval+' · Account ban: '+describeBan(ban)));
+    if(!admin)row.append(makeBtn('Approve / renew',async()=>{const v=duration();if(v){const req=(await base.child('requests/'+uid).once('value')).val();if(req&&['pending','read'].includes(req.status))await base.update({['grants/'+uid]:v,['requests/'+uid]:{createdAt:req.createdAt,status:'approved',reviewedAt:firebase.database.ServerValue.TIMESTAMP,by:auth.currentUser.uid}});else await base.child('grants/'+uid).set(v);}}),makeBtn('Remove approval',()=>base.child('grants/'+uid).remove()));
+    if(uid!==auth.currentUser?.uid)row.append(makeBtn('Ban account',async()=>{if(!confirm('Ban '+name+' from LiveChat Browser only?'))return;const v=duration();if(v)await base.child('accountBans/'+uid).set(v);}));
+    row.append(makeBtn('Unban account',()=>base.child('accountBans/'+uid).remove()));
     const devs=Object.entries(allDevices[uid]||{}).sort((a,b)=>(b[1]?.lastSeen||0)-(a[1]?.lastSeen||0));
     if(!devs.length)row.append(lcEl('p',null,'No browser installation recorded yet.'));
-    for(const [id,info] of devs){const line=lcEl('div');line.style.cssText='margin:7px 0 7px 12px;font-size:12px;';line.append(lcEl('span',null,'Installation '+id.slice(0,12)+'… · '+(info.lastSeen?new Date(info.lastSeen).toLocaleString():'Unknown')+' · '+describe(d.deviceBans?.[id])),makeBtn('Ban installation',async()=>{if(!confirm('Ban this saved installation only? Other installations are not affected.'))return;const v=duration();if(v)await base.child('deviceBans/'+id).set(v);}),makeBtn('Unban installation',()=>base.child('deviceBans/'+id).remove()));row.append(line);}
+    for(const [id,info] of devs){const line=lcEl('div');line.style.cssText='margin:7px 0 7px 12px;font-size:12px;';line.append(lcEl('span',null,'Installation '+id.slice(0,12)+'… · '+(info.lastSeen?new Date(info.lastSeen).toLocaleString():'Unknown')+' · '+describeBan(d.deviceBans?.[id])),makeBtn('Ban installation',async()=>{if(!confirm('Ban this saved installation only? Other installations are not affected.'))return;const v=duration();if(v)await base.child('deviceBans/'+id).set(v);}),makeBtn('Unban installation',()=>base.child('deviceBans/'+id).remove()));row.append(line);}
     list.append(row);
    }
-   search.oninput=()=>{for(const row of list.children)row.hidden=!row.dataset.name.toLowerCase().includes(search.value.toLowerCase());};
+   search.oninput=()=>{searchText=search.value;for(const row of list.children)row.hidden=!row.dataset.name.toLowerCase().includes(searchText.toLowerCase());};search.oninput();
   }catch(e){content.textContent='Browser controls unavailable: '+(e.message||e);}
  };await reload();
 }
@@ -18667,7 +18724,7 @@ function lcToolScaffold(key,title) {
 function openLivechatTool(key) {
   if(key==='legacySettings'){ if(window.livechatOpenLegacySettings)return window.livechatOpenLegacySettings();return; }
   if(impersonating && (key==='email'||key==='browser'||key==='watchHistory')){showToast('Linked or protected apps cannot be opened in Login As.');return;}
-  if(key==='livechatBrowser'){if(!lcToolEnabled(key))return showToast('LiveChat Browser is not available for this account.');window.open('https://grinchtaffy.github.io/proxy/','_blank','noopener');return;}
+  if(key==='livechatBrowser'){if(!currentUser||impersonating)return showToast('Sign in to your own account first.');window.open('https://grinchtaffy.github.io/proxy/','_blank','noopener');return;}
   if(key==='browser')return lcOpenBrowser();
   if(key==='htmlRunner')return lcOpenRunner();
   if(key==='watchHistory')return lcShowWatchHistory();
@@ -22958,7 +23015,7 @@ const opts=[['grades','📊 Grades','Live StudentVUE grades, history and GradeWa
  ['gmail','✉ Gmail','Mail inbox',()=>typeof lcToolEnabled==='function'&&lcToolEnabled('email'),()=>window.openLivechatTool?.('email')],
  ['ai','🤖 AI Assistant','Full-screen AI',()=>typeof aiCanUse==='function'&&aiCanUse(),()=>window.openHomeworkAi?.()],
  ['youtube','▶ YouTube','Open YouTube',()=>typeof lcToolEnabled==='function'&&lcToolEnabled('youtube'),()=>window.livechatOpenYouTube?.()],
- ['livechatBrowser','🌐 LiveChat Browser','Browser',()=>typeof lcToolEnabled==='function'&&lcToolEnabled('livechatBrowser'),()=>window.openLivechatTool?.('livechatBrowser')],
+ ['livechatBrowser','🌐 LiveChat Browser','Browser · request access if needed',()=>!!currentUser&&!impersonating,()=>window.openLivechatTool?.('livechatBrowser')],
  ['browser','🌐 Browser','Cloud browser',()=>typeof lcToolEnabled==='function'&&lcToolEnabled('browser'),()=>window.openLivechatTool?.('browser')],
  ['htmlRunner','⌨ HTML Runner','Run local HTML',()=>typeof lcToolEnabled==='function'&&lcToolEnabled('htmlRunner'),()=>window.openLivechatTool?.('htmlRunner')],
  ['schedule','🗓 Calendar & Tasks','Admin-only calendar, events, tasks and timed reminders',()=>typeof isAdminAccount==='function'&&isAdminAccount(),()=>window.lcAdminScheduleOpen?.()],
